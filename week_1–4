@@ -1,3 +1,124 @@
+
+````
+```
+Act as a Principal Distributed Systems Architect, Lead Cloud Data Engineer, and Elite Technical Interviewer. 
+
+### OBJECTIVE
+You are tasked with generating an exhaustive, production-grade, end-to-end Data Engineering Master Encyclopedia and Implementation Guide. This guide must strictly reverse-engineer and expand upon the complete 32-week curriculum of Sumit Mittal's (TrendyTech) "The Ultimate Data Engineering Masters Program"[cite: 1]. 
+
+Every single technical concept, architecture diagram (in ASCII/text), internal mechanism, code implementation, operational gotcha, hands-on lab, and interview scenario must be written directly into this document. 
+
+### STRICT CONSTRAINT: ZERO EXTERNAL LINKS / FULLY SELF-CONTAINED
+- Do NOT provide external URLs, hyperlinks, or references pointing to external websites, YouTube videos, GitHub links, or vendor docs.
+- Do NOT use placeholders such as "refer to the official documentation", "details left as an exercise", or "code omitted for brevity".
+- All code blocks, SQL DDL/DMLs, architectural blueprints, configuration parameters, and technical explanations must be fully articulated and written out in complete detail directly within your output.
+
+---
+
+### INGESTED CURRICULUM BLUEPRINT TO EXPAND
+
+#### MILESTONE 1: DISTRIBUTED PROCESSING FUNDAMENTALS & PYSPARK (WEEKS 1–13)[cite: 1]
+- Week 1: Big Data - The Big Picture (Monolithic vs Distributed systems, OLTP vs OLAP, CAP Theorem, compute-storage decoupling)[cite: 1]
+- Week 2: Distributed Storage & Data Lake (HDFS internals, NameNode/DataNode, block allocation, replication, Data Lake storage zones)[cite: 1]
+- Week 3: Distributed Processing Fundamentals (MapReduce lineage, YARN resource manager, NodeManager, ApplicationMaster, why Spark replaced MapReduce)[cite: 1]
+- Week 4: Apache Spark Core APIs (SparkContext, RDD lineage, Directed Acyclic Graph (DAG), lazy evaluation, narrow vs wide transformations, actions)[cite: 1]
+- Week 5: Spark APIs - DataFrames & Spark SQL (SparkSession, Catalyst Optimizer analysis/logical/physical phases, Tungsten engine, StructType schema enforcement)[cite: 1]
+- Week 6: Spark DataFrame Transformations (String/date/array/struct/map manipulations, complex aggregation, explode, pivot, window analytical functions)[cite: 1]
+- Week 7: Apache Spark Caching In-Depth (StorageLevel mechanics: MEMORY_ONLY, MEMORY_AND_DISK, MEMORY_ONLY_SER, cache() vs persist(), unpersist, eviction LRU policies)[cite: 1]
+- Week 8: Apache Spark Architecture (Driver node, Cluster Manager, Worker nodes, Executor allocation, Task execution, Slot mechanics, Off-heap vs On-heap memory)[cite: 1]
+- Week 9: Apache Spark Internals (Shuffle service, shuffle spill to disk/memory, hash partitioner, range partitioner, shuffle write/read metrics, stage boundaries)[cite: 1]
+- Week 10: Apache Spark Optimizations (Join strategies: Broadcast Hash Join, Shuffle Hash Join, Sort-Merge Join, Cartesian Join; broadcast thresholds; bucketed tables)[cite: 1]
+- Week 11: More on Spark Optimizations (Data skew resolution via key salting, Adaptive Query Execution (AQE): dynamic coalescing, skew join optimization, runtime broadcast conversion; spark.sql.shuffle.partitions tuning)[cite: 1]
+- Week 12: GIT, GitHub & CI/CD (Git branching strategies: GitFlow vs Trunk-based, merge vs rebase, resolving conflicts, GitHub Actions for PySpark unit testing with pytest)[cite: 1]
+- Week 13: Apache Hive (Metastore architecture, Managed vs External tables, Partitioning vs Bucketing, dynamic partition inserts, Hive SerDe)[cite: 1]
+- Milestone 1 Power Modules:
+  - Apache Spark Capstone Project: Lending Club Financial Risk & Delinquency Engine (multi-gigabyte loan aggregation, imputation, risk metrics)[cite: 1]
+  - Apache Spark Advanced Interview Technical Defense (50+ high-frequency scenario questions with deep mechanical answers)[cite: 1]
+  - Data Structures & Algorithms (DSA) for Data Engineers: Big-O analysis, HashMaps, Two-Pointers, Sliding Windows, Monotonic Stacks, Graph/DAG traversal[cite: 1]
+  - Profile Architecture: Resume STAR-format bullet formulas, LinkedIn search algorithm optimization, Naukri keyword ranking[cite: 1]
+
+#### MILESTONE 2: AZURE CLOUD & AZURE DATABRICKS IN-DEPTH (WEEKS 14–24)[cite: 1]
+- Week 14: Azure Cloud Fundamentals (Azure Active Directory/Entra ID, IAM RBAC roles, Azure Subscription topology, Azure Data Lake Storage Gen2, Hierarchical Namespace)[cite: 1]
+- Weeks 15–22: Azure Databricks In-Depth (8 Weeks)[cite: 1]:
+  1. What is Databricks and Why Databricks; Databricks Free Edition vs Azure Databricks (Control Plane vs Data Plane separation, VNet injection, managed compute)[cite: 1]
+  2. High-Level Architecture & Cluster Modes (Single-node, Standard, Shared/User Isolation clusters, driver-worker sizing, autoscaling algorithms)[cite: 1]
+  3. Table Formats & Management (Managed vs External tables, Delta format specs, Apache Iceberg managed tables in Databricks, Unity Catalog table registration)[cite: 1]
+  4. Databricks Notebook Environments (Magic commands: %sql, %python, %fs, %sh; Databricks Utilities: dbutils.fs, dbutils.secrets, dbutils.notebook, dbutils.widgets)[cite: 1]
+  5. Lakehouse Architecture & Delta Lake Deep Dive (ACID compliance, `_delta_log` JSON commits + CRC checkpoints, concurrency control, Time Travel, VACUUM retention, OPTIMIZE bin-packing, Z-Ordering, Liquid Clustering)[cite: 1]
+  6. Ingestion Patterns: Databricks COPY INTO vs Auto Loader (`cloudFiles` schema inference, schema evolution, notification mode vs directory listing)[cite: 1]
+  7. Unity Catalog Enterprise Governance (3-level namespace: `catalog.schema.table`, External Volumes vs Managed Volumes, Storage Credentials, Row Filters, Column Masks, audit logging)[cite: 1]
+  8. Modern Pipelines & Orchestration: Lakeflow Declarative Pipelines (formerly Delta Live Tables - DLT: expectations `@dlt.expect_or_drop`, continuous vs triggered), Lakeflow Connect, Lakeflow Jobs (multi-task DAGs, alert policies, repair runs)[cite: 1]
+  9. Production Deployment: Databricks Asset Bundles (DABs - `databricks.yml`, bundle init, deployment across Dev/Staging/Prod, CI/CD integration)[cite: 1]
+- Weeks 23–24: Azure Data Factory (ADF) (2 Weeks) (Integration Runtime: Azure vs Self-Hosted, Linked Services, Datasets, Pipelines, Copy Activity, Mapping Data Flows, Lookup/ForEach/If activities, Event-based and Schedule triggers, Parameterization, Git integration)[cite: 1]
+- Milestone 2 Power Modules:
+  - Azure Cloud Capstone Project: End-to-End Enterprise Medallion Lakehouse (ADF Ingestion -> ADLS Gen2 Bronze -> Databricks Silver Cleansing -> Unity Catalog Governed Gold Star Schema)[cite: 1]
+  - Azure & Databricks Technical Interview Deep Dive (architectural defense, cost management, cluster failure recovery)[cite: 1]
+
+#### MILESTONE 3: STREAMING, DATA MODELING & AWS BIG DATA (WEEKS 25–32)[cite: 1]
+- Week 25: Data Modeling for Lakehouse & Warehouse (Ralph Kimball Dimensional Modeling, Fact vs Dimension tables, Star vs Snowflake schemas, Conformed Dimensions, Grain definition, Slowly Changing Dimensions: SCD Type 1, SCD Type 2 with PySpark MERGE implementations, SCD Type 3)[cite: 1]
+- Weeks 26–27: Spark Structured Streaming (2 Weeks) (Micro-batch model, Source/Sink semantics, Output modes: Append, Complete, Update; Event-time vs Processing-time, Sliding & Tumbling windows, Watermarking mechanics, Stateful streaming operations, Checkpoint recovery, writeStream configuration)[cite: 1]
+- Week 28: Apache Kafka (Kafka brokers, Topics, Partitions, Offset commit semantics, Consumer Groups, Producer acks, Exactly-Once Semantics (EOS), integrating Kafka directly with PySpark Structured Streaming)[cite: 1]
+- Week 29: Big Data on AWS Cloud - Athena & EC2 (Amazon S3 bucket layout, IAM roles and policies, EC2 cluster configuration, serverless query execution with Amazon Athena, Glue Data Catalog registration)[cite: 1]
+- Week 30: Big Data on AWS Cloud - EMR (Elastic MapReduce cluster lifecycle, Core vs Task nodes, running PySpark step jobs, Spot instance optimization, EMR Studio)[cite: 1]
+- Week 31: Big Data on AWS Cloud - AWS Glue (Glue Data Catalog, Crawlers, DynamicFrames vs Spark DataFrames, Glue ETL jobs, serverless pipeline triggers)[cite: 1]
+- Week 32: Big Data on AWS Cloud - Redshift, Lambda, S3 (Amazon Redshift distribution styles: Even, Key, All; Sort keys: Compound vs Interleaved; Redshift Spectrum; AWS Lambda event-driven file processing, S3 event notifications)[cite: 1]
+- Milestone 3 Power Modules:
+  - AWS Project Pipeline: Serverless Lakehouse Pipeline (S3 Raw -> Lambda Trigger -> Glue ETL -> Redshift Mart & Athena Analysis)[cite: 1]
+  - Streaming Fraud Detection Capstone: Kafka -> PySpark Structured Streaming -> Delta Lake Silver -> Aggregated Alert Mart[cite: 1]
+
+---
+
+### REQUIRED OUTPUT STRUCTURE PER MODULE
+For EVERY SINGLE MODULE in the 32-week syllabus, you must generate all five of the following sub-sections:
+
+#### SECTION 1: ARCHITECTURAL DEEP DIVE & INTERNAL MECHANICS
+- Explain how the technology works under the hood at the binary, memory, network, and execution levels.
+- Provide ASCII architecture diagrams showing data flow, process isolation, and internal data structures.
+- Detail mathematical tradeoffs, memory layout (JVM heap, execution/storage memory fractions), or protocol specifications (e.g., Delta log JSON commits, Kafka partition assignments).
+
+#### SECTION 2: PRODUCTION-GRADE CODE & IMPLEMENTATION
+- Provide complete, syntactically valid, production-grade scripts (PySpark, Spark SQL, Python, Delta Live Tables/Lakeflow, Databricks CLI, Bash, or Terraform).
+- Include comprehensive configuration dictionaries, logging, defensive exception handling, and parameterization.
+- No pseudocode; all code must reflect real-world enterprise engineering standards.
+
+#### SECTION 3: PRODUCTION GOTCHAS, FAILURE MODES & TUNING RULES
+- Detail real-world failures: data skew, OOM (`java.lang.OutOfMemoryError`), disk spills, file system thrashing (small file problem), schema drift, late-arriving records, and silent data corruption.
+- Provide step-by-step diagnostic workflows: metrics to inspect in the Spark UI, Databricks Cluster Metrics, or CloudWatch/Azure Monitor.
+- List explicit configuration parameters and mathematical tuning formulas to resolve each issue.
+
+#### SECTION 4: STEP-BY-STEP HANDS-ON LAB SPECIFICATION
+- Scenario description: A realistic enterprise engineering problem.
+- Input data specification: Explicit schemas, sample records, and edge cases (nulls, malformed records, duplicates).
+- Step-by-step instructions: Setup, data ingestion, core transformation, optimization pass, and table write.
+- Verification assertion: Automated unit tests (pytest / assertion statements) to prove pipeline correctness.
+
+#### SECTION 5: SENIOR/STAFF INTERVIEW DEFENSE & SCENARIOS
+- 2–3 high-level scenario questions per week reflecting FAANG/Tier-1 data engineering interviews.
+- Model answers using the STAR format (Situation, Task, Action, Result) with quantitative metrics (e.g., "reduced shuffle volume from 4.2TB to 380GB, cutting job run time by 68%").
+- "Trap warning": Common misconceptions candidates utter and how to avoid them.
+
+---
+
+### ADDITIONAL MODULES TO COMPLETE IN FULL DEPTH
+
+1. **CAPSTONE PROJECT BLUEPRINTS (Fully Written)**:
+   - **Capstone 1**: Lending Club PySpark Financial Analytics (Batch ETL, data cleaning, feature calculation, window aggregations, salting optimization, performance metrics).
+   - **Capstone 2**: Enterprise Azure Medallion Lakehouse (ADLS Gen2 -> ADF Pipeline -> Databricks Auto Loader -> Delta Silver -> Unity Catalog Gold Star Schema with DABs).
+   - **Capstone 3**: Real-Time Streaming Fraud Engine (Kafka broker ingestion -> PySpark Structured Streaming -> 10-minute sliding window with 5-minute watermark -> Delta Sink).
+   - **Capstone 4**: AWS Serverless Analytics Pipeline (S3 event -> Lambda -> AWS Glue ETL -> Athena & Amazon Redshift with distribution/sort keys).
+
+2. **DSA FOR DATA ENGINEERS MASTER MODULE**:
+   - Provide complete Python solutions for: Key-Value frequency aggregations, Two-Pointers for deduplication, Sliding Window stream rate calculations, Cycle detection in DAG dependencies (Topological Sort / Kahn's Algorithm), and LRU Cache implementation.
+
+3. **CAREER & SCREENING OPTIMIZATION**:
+   - Quantified resume bullet templates for each milestone.
+   - Algorithmic optimization rules for Naukri and LinkedIn profiles (keyword density, skill endorsements, boolean search string matching for recruiters).
+
+Generate the complete, exhaustive material now without truncating, skipping steps, or omitting code blocks.
+```
+````
+
+
 # Data Engineering Master Encyclopedia and Implementation Guide
 ## Volume 1 — Distributed Systems, HDFS, MapReduce/YARN, and Spark RDDs
 
@@ -3750,3 +3871,1960 @@ Expected:
 - [ ] Verify the commit manifest and reconciliation metrics.
 
 **Scope status:** Weeks 1–4 are developed in this installment. Weeks 5–32, the four complete capstones, the 50+ question Spark interview bank, the DSA master module, and career modules are **not yet included**; presenting them as complete here would misrepresent the coverage.
+
+
+Yes — below is a detailed **Weeks 5–7 continuation** of your [Weeks 1–4 guide](https://github.com/surendhar-333/DES/blob/afee133b58663f8013f571e72e519e08bc8564de/week_1%E2%80%934), covering **DataFrames, Spark SQL, transformations, and caching**.
+
+It continues the same **versioned lending dataset**, business rules, and reference environment. You can save this as **`week_5–7.md`**. I haven’t modified the repository.
+
+# Data Engineering Master Encyclopedia and Implementation Guide
+## Volume 2 — Spark DataFrames, Spark SQL, Transformations, and Caching
+
+### Engineering conventions
+
+- **Reference environment:** Linux, Python 3.11, Java 11, and Apache Spark/PySpark 3.5.1.
+- These versions match Volume 1; they are not claims about the latest releases.
+- Financial amounts remain in **integer cents**, with decimal aggregation where appropriate.
+- The examples use batch processing, not Structured Streaming.
+- Code is supplied for the laboratory but **has not been executed in your environment**.
+- The local Spark laboratory demonstrates semantics, not production-scale performance.
+- Production use also requires access control, monitoring, capacity testing, retention policies, and a safe output-publication protocol.
+
+---
+
+# 0. Learning Roadmap
+
+| Week | Main focus | Practical deliverable |
+|---|---|---|
+| 5 | DataFrame fundamentals, schemas, ingestion, validation, and Parquet | A schema-controlled lending pipeline |
+| 6 | Spark SQL, aggregations, joins, windows, and nested transformations | Reconciled portfolio analytics |
+| 7 | Lazy evaluation, caching, persistence, execution plans, and testing | A measurable, tested pipeline with controlled cache usage |
+
+### What remains for Weeks 8–11?
+
+This volume introduces execution plans and shuffle-producing operations only where needed to understand the code.
+
+Detailed treatment of the following belongs in the next volume:
+
+- Driver and executor architecture.
+- Job, stage, and task scheduling.
+- Shuffle internals.
+- Join algorithms.
+- Adaptive Query Execution.
+- Skew diagnosis and mitigation.
+- Partition-sizing strategies.
+
+The goal here is to establish **correct DataFrame and SQL semantics before advanced tuning**.
+
+---
+
+# 1. Shared Laboratory: Preserve the Business Contract
+
+The source dataset remains a collection of versioned loan snapshots.
+
+| Field | Logical meaning | Laboratory representation |
+|---|---|---|
+| `loan_id` | Loan identifier | String |
+| `version` | Increasing source version per loan | Signed 64-bit integer |
+| `customer_id` | Customer identifier | String |
+| `principal_cents` | Principal in cents | Signed 64-bit integer |
+| `status` | `CURRENT`, `LATE`, or `PAID` | String |
+
+### Rules carried forward
+
+1. Identical duplicate records are allowed.
+2. Different payloads for the same `(loan_id, version)` are fatal.
+3. The highest valid version determines the current loan snapshot.
+4. `PAID` loans retain their original principal for historical reporting.
+5. Active principal includes `CURRENT` and `LATE`.
+6. Delinquent principal includes only `LATE`.
+7. Delinquent principal is **not automatically equivalent to overdue balance or credit loss**.
+
+### Representation clarification
+
+Volume 1’s Python validator allows an arbitrarily large positive Python integer for `version`.
+
+Spark’s `LongType` has a fixed upper bound:
+
+\[
+2^{63}-1
+\]
+
+This laboratory explicitly rejects versions above that bound. That is a documented representation restriction, not a silent cast.
+
+### Expected results
+
+| Measurement | Expected |
+|---|---:|
+| Input records | 9 |
+| Valid records before deduplication | 5 |
+| Rejected records | 4 |
+| Identical duplicate rows removed | 1 |
+| Unique loan versions | 4 |
+| Superseded versions | 1 |
+| Current loans | 3 |
+| Total principal cents | 350000 |
+| Active principal cents | 300000 |
+| Delinquent principal cents | 100000 |
+
+\[
+\text{Delinquency ratio}
+=
+\frac{100000}{300000}
+=
+\frac{1}{3}
+\]
+
+The implementation below is a **full-snapshot batch pipeline**. Each input must contain the history needed to derive the complete current snapshot. It is not an incremental merge engine.
+
+---
+
+# Week 5 — Spark DataFrames, Schemas, and Reliable Ingestion
+
+## Section 1: Architectural Deep Dive
+
+### 5.1 What is a DataFrame?
+
+A Spark DataFrame is a distributed collection of rows with a named schema.
+
+Unlike a Python list, the data is not normally held entirely inside the driver process.
+
+Unlike an arbitrary RDD transformation, a DataFrame operation usually expresses its intent through Spark’s structured expression system.
+
+For example:
+
+```python name=examples/week05_basic_dataframe.py
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+spark = SparkSession.builder.appName("week05-basics").getOrCreate()
+
+loans = spark.createDataFrame(
+    [
+        ("L001", 100000, "LATE"),
+        ("L002", 200000, "CURRENT"),
+        ("L005", 50000, "PAID"),
+    ],
+    "loan_id string, principal_cents long, status string",
+)
+
+active = (
+    loans
+    .filter(F.col("status").isin("CURRENT", "LATE"))
+    .select("loan_id", "principal_cents")
+)
+
+active.show()
+spark.stop()
+```
+
+The transformation describes:
+
+> Keep active loans and return only the identifier and principal.
+
+Spark can analyze the filter and projection because they are expressed as built-in relational operations.
+
+### 5.2 RDDs versus DataFrames
+
+| Concern | RDD | DataFrame |
+|---|---|---|
+| Data model | Arbitrary elements | Rows with a schema |
+| Typical API | Python functions over records | Column expressions and relational operators |
+| Optimizer visibility | Limited inside arbitrary functions | High for supported expressions |
+| Python execution | Common in Python RDD transformations | Avoidable for many built-in operations |
+| SQL integration | Requires conversion | Native |
+| Typical use | Specialized low-level processing | Structured ETL and analytics |
+
+**Important:** DataFrame syntax alone does not guarantee efficiency. A DataFrame pipeline containing unnecessary Python UDFs, excessive shuffles, or repeated actions can still perform poorly.
+
+### 5.3 Schema is part of correctness
+
+A schema defines:
+
+- Column names.
+- Data types.
+- Nested structures.
+- Nullability metadata.
+
+It does **not** automatically enforce every business rule.
+
+For example, `LongType` does not express:
+
+- Principal must be positive.
+- Principal must not exceed \(10^{12}\).
+- Version must be greater than zero.
+- Status must belong to an allowed set.
+- A version must have exactly one payload.
+
+Those require explicit validation.
+
+### 5.4 Why schema inference is risky
+
+Inference is convenient for exploration, but production pipelines usually need a deliberate schema.
+
+Problems include:
+
+- Different files producing different inferred types.
+- Numeric identifiers losing their intended string semantics.
+- Additional inference work.
+- Empty or all-null datasets providing insufficient type information.
+- Source changes altering downstream behavior.
+
+A practical rule:
+
+> Infer while exploring; define and test the contract when building a repeatable pipeline.
+
+### 5.5 An explicit schema is not a strict JSON validator
+
+A subtle but important distinction:
+
+> Successfully parsing input into a Spark schema does not prove that the original JSON matched the source contract exactly.
+
+Depending on the reader and configuration:
+
+- Unknown fields may be ignored.
+- Missing fields may become null.
+- Some values may be converted.
+- Malformed input may produce partial results.
+
+Volume 1’s validator additionally checks the original object’s exact field set and Python value types.
+
+For continuity, the laboratory below keeps that validator at the ingestion boundary, then uses DataFrames for downstream processing.
+
+This incurs Python parsing overhead. It is a correctness-oriented reference implementation, not a claim that Python parsing is the fastest ingestion strategy.
+
+### 5.6 Lazy evaluation
+
+Most DataFrame transformations construct a plan rather than immediately process every row.
+
+Examples:
+
+- `select`
+- `filter`
+- `withColumn`
+- `groupBy(...).agg(...)`
+- `join`
+- `distinct`
+
+Actions trigger execution:
+
+- `count`
+- `collect`
+- `show`
+- `write`
+- `first`
+
+Schema inference, metadata discovery, and some planning activities may perform work before the main data-processing action. “Lazy” does not mean “absolutely nothing happens until an action.”
+
+### 5.7 DataFrames are immutable
+
+Calling `withColumn` returns another DataFrame; it does not mutate existing rows in place.
+
+That also does not mean Spark immediately copies the whole dataset. The new DataFrame generally represents a new logical plan.
+
+### 5.8 A `Column` is an expression
+
+A Spark `Column` is not a local scalar.
+
+Use Spark operators:
+
+| Intent | Correct approach |
+|---|---|
+| Logical AND | `&` |
+| Logical OR | `\|` |
+| Logical NOT | `~` |
+| Membership | `.isin(...)` |
+| Missing value | `.isNull()` |
+| Nonmissing value | `.isNotNull()` |
+
+Parenthesize individual comparisons when combining them.
+
+Python `and` and `or` attempt to evaluate Python truth values; they do not build distributed Spark predicates.
+
+---
+
+## Section 2: Complete DataFrame Pipeline
+
+### 5.9 Project additions
+
+Keep the files from Volume 1, including:
+
+- `loanbook/model.py`
+- `scripts/generate_input.py`
+- `pyproject.toml`
+
+Add:
+
+```text name=week05-project-additions.txt
+de-master/
+├── loanbook/
+│   └── dataframe_job.py
+├── tests/
+│   └── test_dataframe.py
+└── examples/
+    ├── week06_sql.py
+    ├── week06_joins.py
+    ├── week06_windows.py
+    ├── week06_nested.py
+    └── week07_cache_benchmark.py
+```
+
+### 5.10 Design
+
+The pipeline follows this sequence:
+
+1. Read one text record per input line.
+2. Validate each JSON record using the existing source contract.
+3. Separate valid and rejected records.
+4. Remove identical duplicates across the entire payload.
+5. Detect conflicting payloads for a loan version.
+6. Select the highest version per loan.
+7. Calculate exact principal totals.
+8. Write separate Parquet outputs.
+
+Rejected output contains:
+
+- Source file.
+- SHA-256 fingerprint of the decoded line.
+- Rejection reason.
+
+It deliberately excludes the raw financial payload.
+
+A hash is useful for correlation, but it is **not a guarantee of anonymization**. Treat rejection metadata as access-controlled data.
+
+### 5.11 Implementation
+
+```python name=loanbook/dataframe_job.py
+import argparse
+import hashlib
+import json
+from decimal import Decimal
+
+from pyspark import StorageLevel
+from pyspark.sql import DataFrame, SparkSession, Window
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+from loanbook.model import ValidationError, parse_record
+
+
+LONG_MAX = 2**63 - 1
+
+BUSINESS_COLUMNS = [
+    "loan_id",
+    "version",
+    "customer_id",
+    "principal_cents",
+    "status",
+]
+
+PARSED_SCHEMA = T.StructType([
+    T.StructField("source_file", T.StringType(), False),
+    T.StructField("raw_sha256", T.StringType(), False),
+    T.StructField("reject_reason", T.StringType(), True),
+    T.StructField("loan_id", T.StringType(), True),
+    T.StructField("version", T.LongType(), True),
+    T.StructField("customer_id", T.StringType(), True),
+    T.StructField("principal_cents", T.LongType(), True),
+    T.StructField("status", T.StringType(), True),
+])
+
+
+def parse_partition(rows):
+    """Validate records once per iterator; preserve no raw payload in output."""
+    for row in rows:
+        raw = row["raw"]
+        source_file = row["source_file"]
+
+        # Fingerprint of decoded UTF-8 text, excluding the line terminator.
+        # This is not an exact fingerprint of the original file bytes.
+        fingerprint = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+        try:
+            record = parse_record(raw)
+
+            if record["version"] > LONG_MAX:
+                raise ValidationError("version_exceeds_spark_long")
+
+        except ValidationError as exc:
+            yield (
+                source_file,
+                fingerprint,
+                str(exc),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        else:
+            yield (
+                source_file,
+                fingerprint,
+                None,
+                record["loan_id"],
+                record["version"],
+                record["customer_id"],
+                record["principal_cents"],
+                record["status"],
+            )
+
+
+def parse_lines(raw: DataFrame) -> DataFrame:
+    return raw.sparkSession.createDataFrame(
+        raw.rdd.mapPartitions(parse_partition),
+        PARSED_SCHEMA,
+    )
+
+
+def read_input(spark: SparkSession, path: str) -> DataFrame:
+    raw = spark.read.text(path).select(
+        F.col("value").alias("raw"),
+        F.input_file_name().alias("source_file"),
+    )
+    return parse_lines(raw)
+
+
+def valid_records(parsed: DataFrame) -> DataFrame:
+    return (
+        parsed
+        .filter(F.col("reject_reason").isNull())
+        .select(*BUSINESS_COLUMNS)
+    )
+
+
+def rejected_records(parsed: DataFrame) -> DataFrame:
+    return (
+        parsed
+        .filter(F.col("reject_reason").isNotNull())
+        .select("source_file", "raw_sha256", "reject_reason")
+    )
+
+
+def assert_no_conflicts(unique_versions: DataFrame) -> None:
+    conflicts = (
+        unique_versions
+        .groupBy("loan_id", "version")
+        .count()
+        .filter(F.col("count") > 1)
+    )
+
+    # Bring back only an existence signal, not sensitive payloads.
+    if conflicts.limit(1).count() > 0:
+        raise ValueError("CONFLICTING_VERSION")
+
+
+def current_snapshot(unique_versions: DataFrame) -> DataFrame:
+    ordering = (
+        Window
+        .partitionBy("loan_id")
+        .orderBy(F.col("version").desc())
+    )
+
+    return (
+        unique_versions
+        .withColumn("_row_number", F.row_number().over(ordering))
+        .filter(F.col("_row_number") == 1)
+        .drop("_row_number")
+    )
+
+
+def portfolio_metrics(current: DataFrame) -> DataFrame:
+    # Cast BEFORE summing. Casting a potentially overflowing long sum
+    # afterward would be too late.
+    amount = F.col("principal_cents").cast("decimal(38,0)")
+    zero = F.lit(0).cast("decimal(38,0)")
+
+    totals = current.agg(
+        F.count("*").alias("loan_count"),
+        F.coalesce(F.sum(amount), zero).alias("principal_cents"),
+        F.coalesce(
+            F.sum(
+                F.when(
+                    F.col("status").isin("CURRENT", "LATE"),
+                    amount,
+                ).otherwise(zero)
+            ),
+            zero,
+        ).alias("active_principal_cents"),
+        F.coalesce(
+            F.sum(
+                F.when(F.col("status") == "LATE", amount)
+                .otherwise(zero)
+            ),
+            zero,
+        ).alias("delinquent_principal_cents"),
+    )
+
+    return totals.withColumn(
+        "delinquency_ratio",
+        F.when(
+            F.col("active_principal_cents") != zero,
+            F.col("delinquent_principal_cents")
+            / F.col("active_principal_cents"),
+        ).otherwise(F.lit(None).cast("decimal(38,6)")),
+    )
+
+
+def run(spark: SparkSession, input_path: str, output_path: str) -> dict:
+    cached = []
+
+    def remember(frame: DataFrame) -> DataFrame:
+        result = frame.persist(StorageLevel.MEMORY_AND_DISK_DESER)
+        cached.append(result)
+        return result
+
+    try:
+        parsed = remember(read_input(spark, input_path))
+
+        input_count = parsed.count()
+        valid = valid_records(parsed)
+        rejected = rejected_records(parsed)
+
+        valid_count = valid.count()
+        rejected_count = rejected.count()
+
+        assert input_count == valid_count + rejected_count
+
+        # Remove identical complete payloads, not arbitrary rows per key.
+        unique_versions = remember(valid.distinct())
+        unique_count = unique_versions.count()
+
+        # Must happen before selecting the latest version.
+        assert_no_conflicts(unique_versions)
+
+        current = remember(current_snapshot(unique_versions))
+        current_count = current.count()
+
+        metrics = portfolio_metrics(current)
+        metric_row = metrics.first().asDict()
+
+        audit = {
+            "input_rows": input_count,
+            "valid_rows": valid_count,
+            "rejected_rows": rejected_count,
+            "duplicate_rows": valid_count - unique_count,
+            "unique_versions": unique_count,
+            "superseded_versions": unique_count - current_count,
+            "current_loans": current_count,
+        }
+
+        base = output_path.rstrip("/")
+
+        # Use a fresh output path per run. These writes are NOT one transaction.
+        rejected.write.mode("errorifexists").parquet(f"{base}/rejected")
+        current.write.mode("errorifexists").parquet(f"{base}/current")
+        metrics.write.mode("errorifexists").parquet(f"{base}/metrics")
+
+        return {"audit": audit, "metrics": metric_row}
+
+    finally:
+        for frame in reversed(cached):
+            frame.unpersist(blocking=True)
+
+
+def json_default(value):
+    if isinstance(value, Decimal):
+        return str(value)
+    raise TypeError(f"Unsupported JSON type: {type(value).__name__}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+
+    spark = (
+        SparkSession.builder
+        .appName("loanbook-dataframes")
+        .config("spark.sql.ansi.enabled", "true")
+        .config("spark.sql.session.timeZone", "UTC")
+        .getOrCreate()
+    )
+
+    try:
+        result = run(spark, args.input, args.output)
+        print(json.dumps(result, indent=2, default=json_default))
+    finally:
+        spark.stop()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### 5.12 Run the laboratory
+
+Run from the `de-master` project root:
+
+```bash name=scripts/run_dataframe_lab.sh
+set -euo pipefail
+
+python -m pip install -e '.[test]'
+
+python scripts/generate_input.py --output data/loans.jsonl
+
+export SPARK_MASTER='local[2]'
+export PYSPARK_PYTHON="$(command -v python)"
+
+python -m loanbook.dataframe_job \
+  --input data/loans.jsonl \
+  --output out/week05-run01
+```
+
+`SPARK_MASTER` is not relied on by this application to configure the master. For an explicit local launch, use Spark’s standard `spark-submit` command instead:
+
+```bash name=scripts/submit_dataframe_lab.sh
+set -euo pipefail
+
+export PYSPARK_PYTHON="$(command -v python)"
+
+spark-submit \
+  --master 'local[2]' \
+  loanbook/dataframe_job.py \
+  --input data/loans.jsonl \
+  --output out/week05-run02
+```
+
+Use a new output directory for each run. On a real cluster, distribute/install `loanbook` on executors and use shared storage paths rather than driver-local files.
+
+### 5.13 Why conflict detection comes before latest-version selection
+
+Suppose the input includes:
+
+| Loan | Version | Principal |
+|---|---:|---:|
+| L001 | 1 | 100000 |
+| L001 | 1 | 999999 |
+| L001 | 2 | 100000 |
+
+Selecting version 2 first would hide the conflict in version 1.
+
+The source contract says a conflicting version is fatal, even if that version is no longer current.
+
+Therefore:
+
+\[
+\text{Validate}
+\rightarrow
+\text{Remove identical duplicates}
+\rightarrow
+\text{Detect conflicts}
+\rightarrow
+\text{Select latest}
+\]
+
+### 5.14 Why not `dropDuplicates(["loan_id", "version"])`?
+
+That operation retains one row for each key, but it does not establish which payload should win.
+
+If two different payloads share the same key, it can silently hide a source-contract violation.
+
+Using full-row `distinct()` removes only identical business payloads. Grouping the remaining rows by key then exposes conflicts.
+
+### 5.15 Why Parquet?
+
+Parquet is suitable for the curated output because it supports:
+
+- Columnar storage.
+- Schema information.
+- Compression.
+- Column pruning.
+- Row-group statistics.
+- Predicate pushdown for supported filters.
+
+However:
+
+> Parquet files alone do not provide multi-table transactions, upserts, or coordinated publication of several output directories.
+
+The three writes above can partially succeed. A production design should use run-specific staging plus a validated publication mechanism, or an appropriate transactional table system.
+
+### 5.16 Week 5 checkpoints
+
+You should now be able to explain:
+
+1. Why a schema is necessary but insufficient for validation.
+2. Why a DataFrame transformation does not normally execute immediately.
+3. Why full-payload deduplication differs from key-based deduplication.
+4. Why a `LongType` sum can overflow even if each input value fits.
+5. Why a directory of Parquet files is not automatically a transactional table.
+
+---
+
+# Week 6 — Spark SQL and Advanced Transformations
+
+## Section 1: SQL and the DataFrame API
+
+### 6.1 Two interfaces to the same structured engine
+
+Spark SQL and the DataFrame API both express structured operations that Spark can analyze and optimize.
+
+Equivalent operations often produce similar optimized plans.
+
+There is no universal rule that:
+
+- SQL is faster than DataFrames, or
+- DataFrames are faster than SQL.
+
+Performance depends on the resulting plan, input layout, runtime configuration, and execution behavior.
+
+Choose based on clarity:
+
+- SQL is often effective for analytical queries.
+- DataFrames work well for programmatic composition.
+- Mixed pipelines are normal.
+
+### 6.2 Temporary views do not materialize data
+
+Calling `createOrReplaceTempView` registers a name for a queryable DataFrame.
+
+It does not, by itself:
+
+- Copy the dataset.
+- Cache the dataset.
+- Write a durable table.
+- Make the view survive application termination.
+
+A local temporary view belongs to its Spark session.
+
+---
+
+## Section 2: Portfolio Analytics in SQL
+
+### 6.3 Status-level reporting
+
+```python name=examples/week06_sql.py
+from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder
+    .appName("week06-sql")
+    .config("spark.sql.ansi.enabled", "true")
+    .getOrCreate()
+)
+
+try:
+    current = spark.read.parquet("out/week05-run01/current")
+    current.createOrReplaceTempView("current_loans")
+
+    status_report = spark.sql("""
+        SELECT
+            status,
+            COUNT(*) AS loan_count,
+            SUM(CAST(principal_cents AS DECIMAL(38, 0)))
+                AS principal_cents,
+            AVG(CAST(principal_cents AS DECIMAL(20, 2)))
+                AS average_principal_cents
+        FROM current_loans
+        GROUP BY status
+        ORDER BY status
+    """)
+
+    portfolio_report = spark.sql("""
+        WITH totals AS (
+            SELECT
+                COUNT(*) AS loan_count,
+                COALESCE(
+                    SUM(CAST(principal_cents AS DECIMAL(38, 0))),
+                    CAST(0 AS DECIMAL(38, 0))
+                ) AS principal_cents,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN status IN ('CURRENT', 'LATE')
+                            THEN CAST(principal_cents AS DECIMAL(38, 0))
+                            ELSE CAST(0 AS DECIMAL(38, 0))
+                        END
+                    ),
+                    CAST(0 AS DECIMAL(38, 0))
+                ) AS active_principal_cents,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN status = 'LATE'
+                            THEN CAST(principal_cents AS DECIMAL(38, 0))
+                            ELSE CAST(0 AS DECIMAL(38, 0))
+                        END
+                    ),
+                    CAST(0 AS DECIMAL(38, 0))
+                ) AS delinquent_principal_cents
+            FROM current_loans
+        )
+        SELECT
+            *,
+            CASE
+                WHEN active_principal_cents = 0 THEN NULL
+                ELSE delinquent_principal_cents / active_principal_cents
+            END AS delinquency_ratio
+        FROM totals
+    """)
+
+    status_report.show(truncate=False)
+    portfolio_report.show(truncate=False)
+
+finally:
+    spark.stop()
+```
+
+Expected status totals:
+
+| Status | Loan count | Principal cents |
+|---|---:|---:|
+| CURRENT | 1 | 200000 |
+| LATE | 1 | 100000 |
+| PAID | 1 | 50000 |
+
+### 6.4 Aggregate functions and nulls
+
+| Expression | Behavior |
+|---|---|
+| `COUNT(*)` | Counts rows |
+| `COUNT(column)` | Counts non-null values |
+| `COUNT(DISTINCT column)` | Counts distinct non-null values |
+| `SUM(column)` | Ignores nulls; returns null with no non-null inputs |
+| `AVG(column)` | Uses non-null values |
+| `COALESCE(a, b)` | Returns the first non-null argument |
+
+An empty portfolio illustrates why these distinctions matter:
+
+- `COUNT(*)` returns zero.
+- `SUM(principal_cents)` returns null.
+- The business report may require total principal to be zero.
+- A delinquency ratio with no active principal is undefined, so this guide returns null.
+
+Do not replace an undefined denominator with an arbitrary number just to avoid a division error.
+
+### 6.5 SQL uses three-valued logic
+
+A predicate can be:
+
+- True.
+- False.
+- Unknown, represented by null.
+
+If `status` is null:
+
+- `status = 'LATE'` is unknown.
+- `status != 'PAID'` is also unknown.
+- A filter retains only rows where the predicate is true.
+
+Therefore, “not paid” does not automatically include missing statuses.
+
+In Spark:
+
+- Use `IS NULL` in SQL.
+- Use `.isNull()` in DataFrames.
+- Use SQL `<=>` or DataFrame `.eqNullSafe(...)` when null-safe equality is genuinely intended.
+
+---
+
+## Section 3: Joins and Cardinality
+
+### 6.6 Start with the intended grain
+
+The **grain** defines what one row represents.
+
+For the current loan snapshot:
+
+> One row represents one loan’s latest valid version.
+
+For a customer dimension:
+
+> One row represents one customer.
+
+Joining these should preserve the number of loan rows if every customer key appears at most once in the dimension.
+
+### 6.7 Join types
+
+| Join | Result |
+|---|---|
+| Inner | Matching row combinations |
+| Left | Every left row, plus matching right data |
+| Full outer | All matches and unmatched rows from both sides |
+| Left semi | Left rows with at least one match |
+| Left anti | Left rows with no match |
+| Cross | Every left/right row combination |
+
+A semi join is useful when the question is only:
+
+> Does a matching customer exist?
+
+It avoids adding right-side columns and does not multiply left rows because of multiple right-side matches.
+
+### 6.8 Join multiplication
+
+For a key \(k\), if the left dataset has \(L_k\) rows and the right dataset has \(R_k\) rows, an equijoin produces:
+
+\[
+L_k \times R_k
+\]
+
+matching rows for that key.
+
+A customer dimension with two rows for one customer can double that customer’s loan principal in a downstream sum.
+
+This is often a **data-model problem**, not a Spark performance problem.
+
+### 6.9 A guarded enrichment join
+
+```python name=examples/week06_joins.py
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+spark = SparkSession.builder.appName("week06-joins").getOrCreate()
+
+try:
+    current = spark.read.parquet("out/week05-run01/current")
+
+    customers = spark.createDataFrame(
+        [
+            ("C001", "SOUTH"),
+            ("C002", "NORTH"),
+            ("C005", "SOUTH"),
+        ],
+        "customer_id string, region string",
+    )
+
+    if customers.filter(F.col("customer_id").isNull()).limit(1).count():
+        raise ValueError("NULL_CUSTOMER_KEY")
+
+    duplicate_keys = (
+        customers
+        .groupBy("customer_id")
+        .count()
+        .filter(F.col("count") > 1)
+    )
+
+    if duplicate_keys.limit(1).count():
+        raise ValueError("DUPLICATE_CUSTOMER_KEY")
+
+    missing_customers = current.join(
+        customers.select("customer_id"),
+        on="customer_id",
+        how="left_anti",
+    )
+
+    if missing_customers.limit(1).count():
+        raise ValueError("MISSING_CUSTOMER")
+
+    enriched = current.join(customers, on="customer_id", how="left")
+
+    assert enriched.count() == current.count()
+
+    region_report = (
+        enriched
+        .groupBy("region")
+        .agg(
+            F.count("*").alias("loan_count"),
+            F.sum(
+                F.col("principal_cents").cast("decimal(38,0)")
+            ).alias("principal_cents"),
+        )
+        .orderBy("region")
+    )
+
+    region_report.show(truncate=False)
+
+finally:
+    spark.stop()
+```
+
+Expected result:
+
+| Region | Loan count | Principal cents |
+|---|---:|---:|
+| NORTH | 1 | 200000 |
+| SOUTH | 2 | 150000 |
+
+The repeated counts are deliberately explicit learning checks. In a larger pipeline, consolidate validation work and measure its cost.
+
+---
+
+## Section 4: Window Functions
+
+### 6.10 Aggregation versus windows
+
+A grouped aggregation reduces rows to one row per group.
+
+A window calculation can retain the original rows while adding context from related rows.
+
+Common uses:
+
+- Latest record selection.
+- Previous and next values.
+- Ranking.
+- Running totals.
+- Within-group comparisons.
+
+### 6.11 Ranking functions
+
+| Function | Tied values | Rank gaps |
+|---|---|---|
+| `row_number` | Assigns distinct sequence numbers | No |
+| `rank` | Same rank for ties | Yes |
+| `dense_rank` | Same rank for ties | No |
+
+`row_number` does not invent a business tie-break rule.
+
+If the ordering columns are not unique, the selected row among ties may be nondeterministic.
+
+In the lending pipeline, conflict detection and full-row deduplication ensure that each loan version has one remaining row. Ordering by descending version is therefore sufficient.
+
+### 6.12 Historical status transitions
+
+```python name=examples/week06_windows.py
+from pyspark.sql import SparkSession, Window
+from pyspark.sql import functions as F
+
+from loanbook.dataframe_job import (
+    assert_no_conflicts,
+    read_input,
+    valid_records,
+)
+
+spark = SparkSession.builder.appName("week06-windows").getOrCreate()
+
+try:
+    parsed = read_input(spark, "data/loans.jsonl")
+    versions = valid_records(parsed).distinct()
+    assert_no_conflicts(versions)
+
+    history_window = (
+        Window
+        .partitionBy("loan_id")
+        .orderBy("version")
+    )
+
+    history = (
+        versions
+        .withColumn(
+            "previous_status",
+            F.lag("status").over(history_window),
+        )
+        .withColumn(
+            "previous_principal_cents",
+            F.lag("principal_cents").over(history_window),
+        )
+        .withColumn(
+            "principal_change_cents",
+            F.col("principal_cents")
+            - F.col("previous_principal_cents"),
+        )
+        .withColumn(
+            "became_late",
+            F.when(
+                F.col("previous_status").isNotNull()
+                & (F.col("previous_status") != "LATE")
+                & (F.col("status") == "LATE"),
+                F.lit(True),
+            ).otherwise(F.lit(False)),
+        )
+    )
+
+    history.orderBy("loan_id", "version").show(truncate=False)
+
+finally:
+    spark.stop()
+```
+
+For L001 version 2:
+
+- Previous status: `CURRENT`.
+- Current status: `LATE`.
+- Principal change: `0`.
+- Became late: `true`.
+
+**Interpretation caveat:** `lag` finds the previous available row, not necessarily the immediately preceding source version. If versions 1 and 3 exist but version 2 is missing, version 1 is the previous observed row for version 3.
+
+### 6.13 Window frames
+
+Two common frame types:
+
+- **ROWS:** positions relative to the current row.
+- **RANGE:** ordering-value ranges, potentially including multiple peers.
+
+For a row-based cumulative calculation, explicitly use:
+
+`rowsBetween(Window.unboundedPreceding, Window.currentRow)`
+
+Do not sum principal across all versions and call it a portfolio balance. Loan versions are snapshots, not necessarily additive financial events.
+
+---
+
+## Section 5: Nested Data and Collection Transformations
+
+### 6.14 `explode` changes the grain
+
+An array field introduces a parent/child relationship.
+
+If a loan contains three tags, exploding those tags creates three rows for that loan.
+
+That means summing loan principal after explosion would count the same principal three times unless the calculation intentionally accounts for the new grain.
+
+```python name=examples/week06_nested.py
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+spark = SparkSession.builder.appName("week06-nested").getOrCreate()
+
+try:
+    loans = spark.createDataFrame(
+        [
+            ("L001", [" manual_review ", "late"]),
+            ("L002", []),
+            ("L005", None),
+        ],
+        "loan_id string, tags array<string>",
+    )
+
+    normalized = loans.withColumn(
+        "normalized_tags",
+        F.transform(
+            F.col("tags"),
+            lambda tag: F.upper(F.trim(tag)),
+        ),
+    )
+
+    expanded = normalized.select(
+        "loan_id",
+        F.explode_outer("normalized_tags").alias("tag"),
+    )
+
+    expanded.show(truncate=False)
+
+finally:
+    spark.stop()
+```
+
+### 6.15 `explode` versus `explode_outer`
+
+- `explode` produces no child rows for null or empty arrays.
+- `explode_outer` retains the parent with a null child value for null or empty arrays.
+
+If the distinction between “unknown array” and “known empty array” matters, preserve that information before expansion.
+
+### 6.16 A higher-order lambda is not necessarily a Python UDF
+
+The lambda passed to `F.transform` above builds a Spark expression.
+
+It does not execute arbitrary Python code separately for every array element at runtime.
+
+This is different from defining a Python UDF with `F.udf`.
+
+Prefer built-in functions where they express the required behavior clearly.
+
+### 6.17 Other transformation pitfalls
+
+| Operation | Important caution |
+|---|---|
+| `union` | Matches columns by position |
+| `unionByName` | Matches columns by name |
+| `unionByName(..., allowMissingColumns=True)` | Can fill missing fields with null; does not validate business compatibility |
+| `collect_list` | Ordering after distributed aggregation is not guaranteed |
+| `pivot` | Unbounded distinct values can create an excessively wide schema |
+| `withColumn` in a long loop | Can create unnecessarily large plans |
+| `fillna` | Requires field-specific business meaning |
+
+For many derived columns, prefer one clear `select` projection over a long chain of mechanically generated projections.
+
+---
+
+## Section 6: Week 6 Exercises
+
+1. Produce active and delinquent principal by customer.
+2. Find loans whose status changed between available versions.
+3. Add a duplicate customer dimension row and confirm enrichment fails.
+4. Add a missing customer reference and inspect the anti-join result.
+5. Compare `row_number`, `rank`, and `dense_rank` on tied values.
+6. Demonstrate the row-count difference between `explode` and `explode_outer`.
+7. Explain why principal should not be summed across version history.
+
+### Acceptance criteria
+
+- SQL and DataFrame totals agree.
+- Enrichment preserves the intended loan grain.
+- Missing dimension keys are detected.
+- Window ordering is explicit.
+- Expanded child rows do not accidentally inflate financial totals.
+
+---
+
+# Week 7 — Caching, Persistence, Plans, and Testing
+
+## Section 1: Why Repeated Actions Matter
+
+### 7.1 A variable is not a materialized dataset
+
+Assigning a DataFrame to a Python variable stores a reference to a query plan.
+
+If two actions use an expensive uncached transformation, Spark may execute its upstream work again for each action.
+
+For example:
+
+1. Parse raw input.
+2. Validate fields.
+3. Deduplicate.
+4. Produce a report.
+5. Produce another report.
+
+Without a reusable materialization, steps 1–3 may be repeated.
+
+### 7.2 What caching does
+
+Caching asks Spark to retain computed partitions for reuse.
+
+The usual lifecycle is:
+
+1. Construct a DataFrame.
+2. Call `cache()` or `persist(...)`.
+3. Run an action that computes the relevant partitions.
+4. Reuse the cached result.
+5. Call `unpersist()` when finished.
+
+Calling `cache()` does not eagerly load the whole dataset.
+
+Also, `show(20)` may touch only enough partitions to retrieve the requested rows. It is not a reliable way to fully warm a cache.
+
+### 7.3 Default persistence level
+
+For PySpark DataFrames in Spark 3.5.1, `cache()` uses:
+
+**`MEMORY_AND_DISK_DESER`**
+
+Do not confuse DataFrame defaults with Python RDD storage behavior.
+
+Spark SQL’s cache can use a compressed columnar representation; it is not simply a cache of Python `Row` objects.
+
+### 7.4 Common storage choices
+
+| Storage choice | General behavior |
+|---|---|
+| `MEMORY_ONLY` | Keep partitions in memory; missing partitions require recomputation |
+| `MEMORY_AND_DISK_DESER` | Use memory and local disk fallback |
+| `DISK_ONLY` | Store cached partitions on disk |
+| No persistence | Recompute from lineage when required |
+
+Actual memory consumption and representation depend on the API, schema, data, and runtime configuration.
+
+Executor-local cache storage is not durable archival storage.
+
+### 7.5 Caching is not checkpointing
+
+| Mechanism | Main purpose |
+|---|---|
+| Cache/persist | Reuse computed results |
+| Reliable checkpoint | Materialize to a configured reliable checkpoint location and truncate lineage |
+| Local checkpoint | Truncate lineage using executor-local storage, sacrificing reliability |
+| Explicit write | Produce an external output artifact |
+
+Lost cache partitions can often be recomputed from lineage.
+
+That does not make caching a safe snapshot boundary if the source can change underneath the application. Use immutable inputs or a defined snapshot mechanism.
+
+---
+
+## Section 2: When Caching Helps
+
+### 7.6 A simple cost model
+
+Let:
+
+- \(C\): cost of computing the shared intermediate.
+- \(W\): additional cache-materialization cost.
+- \(R\): cost of reading the cached intermediate.
+- \(n\): number of uses.
+
+Without caching:
+
+\[
+T_{\text{uncached}} \approx nC
+\]
+
+With the first use also populating the cache:
+
+\[
+T_{\text{cached}} \approx C+W+(n-1)R
+\]
+
+Caching becomes attractive when:
+
+\[
+(n-1)(C-R)>W
+\]
+
+This is a simplified model. Real results also depend on memory pressure, eviction, spill, concurrency, and the cost of downstream operations.
+
+### 7.7 Good cache candidates
+
+- Expensive validation reused by several branches.
+- A costly normalized dataset used by multiple reports.
+- A deduplicated intermediate needed for validation and output.
+- Iterative computations over the same stable data.
+
+### 7.8 Poor cache candidates
+
+- A cheap intermediate used once.
+- A very large result with little reuse.
+- A source scan where each consumer needs different small column subsets.
+- A cache that competes with memory-intensive joins or aggregations.
+- A dataset whose underlying source is being changed without a snapshot contract.
+
+### 7.9 Cache placement matters
+
+Prefer caching a useful shared intermediate after unnecessary data has been removed.
+
+But do not push business filters past operations where doing so changes semantics.
+
+For example:
+
+> Filtering history to `LATE` before selecting the latest loan version would incorrectly retain loans whose latest status is `PAID`.
+
+Optimization must preserve the business result.
+
+### 7.10 Why the reference job uses three caches
+
+The complete job caches:
+
+1. Parsed records — reused for counts, valid rows, and rejected output.
+2. Unique versions — reused for counts, conflict checking, and latest selection.
+3. Current snapshot — reused for counts, metrics, and output.
+
+This makes reuse explicit for teaching.
+
+It is not a universal production recommendation. Holding several intermediates simultaneously can be wasteful; a production pipeline should measure their sizes and release them as early as safely possible.
+
+---
+
+## Section 3: Inspecting Execution Plans
+
+### 7.11 Useful plan displays
+
+- `explain("extended")`: logical and physical plan stages.
+- `explain("formatted")`: structured physical-plan details.
+- `explain("cost")`: statistics where available.
+
+Statistics are estimates, not measured runtime durations.
+
+### 7.12 Common plan operators
+
+| Operator | General meaning |
+|---|---|
+| `FileScan parquet` | Read Parquet input |
+| `Project` | Select or calculate columns |
+| `Filter` | Apply a predicate |
+| `HashAggregate` | Aggregate using a hash-based strategy |
+| `Exchange` | Redistribute data |
+| `Sort` | Sort rows |
+| `Window` | Execute window expressions |
+| `InMemoryTableScan` | Read cached data |
+| `BatchEvalPython` | Execute ordinary Python UDF evaluation |
+
+Exact operator names can vary by configuration and data-source implementation.
+
+### 7.13 What to ask when reading a plan
+
+1. Is Spark reading only the needed columns?
+2. Are supported predicates pushed to the source?
+3. Where does redistribution occur?
+4. Is a Python execution boundary present?
+5. Are repeated consumers reading a cache?
+6. Did an apparently small transformation introduce a sort or aggregation?
+
+An `Exchange` is not automatically bad. Grouping, deduplication, and many joins legitimately require data movement.
+
+---
+
+## Section 4: A Cache Benchmark
+
+A nine-row dataset is suitable for checking correctness, but not for meaningful performance measurement.
+
+The following example generates a larger synthetic workload and compares repeated reports.
+
+It includes:
+
+- A baseline.
+- Cache materialization time.
+- Reused-query time.
+- Total cached-workflow time.
+
+```python name=examples/week07_cache_benchmark.py
+import argparse
+from time import perf_counter
+
+from pyspark import StorageLevel
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+
+def build_base(spark, rows):
+    base = (
+        spark.range(rows)
+        .withColumn("customer_id", F.col("id") % 100_000)
+        .withColumn(
+            "status",
+            F.when(F.col("id") % 10 == 0, F.lit("LATE"))
+            .otherwise(F.lit("CURRENT")),
+        )
+        .withColumn(
+            "principal_cents",
+            ((F.col("id") % 900_000) + 10_000).cast("long"),
+        )
+    )
+
+    # Synthetic CPU work retained because both report predicates use it.
+    token = F.col("id").cast("string")
+    for _ in range(4):
+        token = F.sha2(token, 256)
+
+    return base.withColumn("token", token).select(
+        "customer_id",
+        "status",
+        "principal_cents",
+        "token",
+    )
+
+
+def reports(frame):
+    filtered = frame.filter(F.substring("token", 1, 1) != "0")
+
+    by_status = filtered.groupBy("status").agg(
+        F.sum("principal_cents").alias("principal_cents")
+    )
+
+    by_segment = (
+        filtered
+        .withColumn("segment", F.col("customer_id") % 20)
+        .groupBy("segment")
+        .agg(F.sum("principal_cents").alias("principal_cents"))
+    )
+
+    return by_status, by_segment
+
+
+def consume(frame):
+    # Results are intentionally bounded: at most 2 and 20 groups.
+    for report in reports(frame):
+        report.collect()
+
+
+def timed(label, operation):
+    started = perf_counter()
+    result = operation()
+    elapsed = perf_counter() - started
+    print(f"{label}: {elapsed:.3f}s")
+    return result, elapsed
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rows", type=int, default=1_000_000)
+    args = parser.parse_args()
+
+    if args.rows <= 0:
+        parser.error("--rows must be positive")
+
+    spark = (
+        SparkSession.builder
+        .appName("week07-cache-benchmark")
+        .config("spark.sql.ansi.enabled", "true")
+        .getOrCreate()
+    )
+
+    cached = None
+
+    try:
+        # Minimal initialization warm-up, not a complete JIT warm-up.
+        spark.range(1000).count()
+
+        base = build_base(spark, args.rows)
+
+        timed("uncached_two_reports", lambda: consume(base))
+
+        cached = base.persist(StorageLevel.MEMORY_AND_DISK_DESER)
+
+        _, materialization_time = timed(
+            "cache_materialization",
+            cached.count,
+        )
+
+        reports(cached)[0].explain("formatted")
+
+        _, reuse_time = timed(
+            "cached_two_reports",
+            lambda: consume(cached),
+        )
+
+        print(
+            "cached_total_including_materialization: "
+            f"{materialization_time + reuse_time:.3f}s"
+        )
+
+    finally:
+        if cached is not None:
+            cached.unpersist(blocking=True)
+        spark.stop()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Run:
+
+```bash name=scripts/run_cache_benchmark.sh
+spark-submit \
+  --master 'local[2]' \
+  examples/week07_cache_benchmark.py \
+  --rows 1000000
+```
+
+### 7.14 Interpret results honestly
+
+Do not assume caching will win.
+
+Record:
+
+- Input row count.
+- Executor configuration.
+- Baseline elapsed time.
+- Materialization time.
+- Cached report time.
+- Total cached workflow time.
+- Cached storage footprint.
+- Spill and garbage-collection behavior where available.
+
+Repeat trials and alternate the order of cached and uncached experiments in separate application runs.
+
+A later run may benefit from JVM warm-up or operating-system caching even without Spark persistence.
+
+### 7.15 Why not benchmark with `count()` alone?
+
+Spark can prune expressions that a count does not need.
+
+If you add an expensive derived column and then call only `count()`, the uncached plan may avoid evaluating that column.
+
+The benchmark therefore uses `token` in the report predicates. The expensive expression is required by both actual reports.
+
+Even then, inspect the plan instead of assuming which work ran.
+
+---
+
+## Section 5: Testing the Pipeline
+
+### 7.16 Test semantics, not only successful execution
+
+A job that finishes without an exception may still:
+
+- Double-count loans.
+- Select an arbitrary version.
+- Lose unmatched records in a join.
+- Convert nulls into misleading values.
+- Hide conflicting payloads.
+- Produce incorrect empty-input results.
+
+Tests should target those failure modes.
+
+### 7.17 Pytest implementation
+
+```python name=tests/test_dataframe.py
+import json
+from decimal import Decimal
+
+import pytest
+from pyspark.sql import SparkSession
+
+from loanbook.dataframe_job import (
+    assert_no_conflicts,
+    current_snapshot,
+    parse_lines,
+    portfolio_metrics,
+    rejected_records,
+    valid_records,
+)
+
+
+@pytest.fixture(scope="session")
+def spark():
+    session = (
+        SparkSession.builder
+        .master("local[2]")
+        .appName("loanbook-dataframe-tests")
+        .config("spark.ui.enabled", "false")
+        .config("spark.sql.shuffle.partitions", "2")
+        .config("spark.sql.ansi.enabled", "true")
+        .config("spark.sql.session.timeZone", "UTC")
+        .getOrCreate()
+    )
+    yield session
+    session.stop()
+
+
+def loan(
+    loan_id="L001",
+    version=1,
+    customer_id="C001",
+    principal_cents=100000,
+    status="CURRENT",
+):
+    return {
+        "loan_id": loan_id,
+        "version": version,
+        "customer_id": customer_id,
+        "principal_cents": principal_cents,
+        "status": status,
+    }
+
+
+def parsed_records(spark, records, extra_lines=()):
+    lines = [json.dumps(record) for record in records]
+    lines.extend(extra_lines)
+
+    raw = spark.createDataFrame(
+        [(line, "fixture.jsonl") for line in lines],
+        "raw string, source_file string",
+    )
+    return parse_lines(raw)
+
+
+def test_original_fixture_reconciles(spark):
+    l002 = loan("L002", 1, "C002", 200000, "CURRENT")
+
+    parsed = parsed_records(
+        spark,
+        [
+            loan(),
+            loan(version=2, status="LATE"),
+            l002,
+            l002,
+            loan("L003", 1, "C003", None, "CURRENT"),
+            loan("L004", 1, "C004", -100, "CURRENT"),
+            loan("L005", 1, "C005", 50000, "PAID"),
+            loan("L006", 1, "C006", "oops", "CURRENT"),
+        ],
+        extra_lines=['{"loan_id": "BROKEN"'],
+    )
+
+    valid = valid_records(parsed)
+    rejected = rejected_records(parsed)
+    unique = valid.distinct()
+
+    assert parsed.count() == 9
+    assert valid.count() == 5
+    assert rejected.count() == 4
+    assert unique.count() == 4
+
+    assert_no_conflicts(unique)
+    current = current_snapshot(unique)
+
+    actual = {
+        (
+            row.loan_id,
+            row.version,
+            row.customer_id,
+            row.principal_cents,
+            row.status,
+        )
+        for row in current.collect()
+    }
+
+    assert actual == {
+        ("L001", 2, "C001", 100000, "LATE"),
+        ("L002", 1, "C002", 200000, "CURRENT"),
+        ("L005", 1, "C005", 50000, "PAID"),
+    }
+
+    metrics = portfolio_metrics(current).first()
+
+    assert metrics.loan_count == 3
+    assert metrics.principal_cents == Decimal("350000")
+    assert metrics.active_principal_cents == Decimal("300000")
+    assert metrics.delinquent_principal_cents == Decimal("100000")
+
+    assert abs(
+        metrics.delinquency_ratio - Decimal(1) / Decimal(3)
+    ) < Decimal("0.000001")
+
+
+def test_historical_conflict_is_fatal(spark):
+    parsed = parsed_records(
+        spark,
+        [
+            loan(version=1, principal_cents=100000),
+            loan(version=1, principal_cents=999999),
+            loan(version=2, status="LATE"),
+        ],
+    )
+
+    unique = valid_records(parsed).distinct()
+
+    with pytest.raises(ValueError, match="CONFLICTING_VERSION"):
+        assert_no_conflicts(unique)
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"principal_cents": True},
+        {"principal_cents": 1.5},
+        {"version": 0},
+        {"version": 2**63},
+        {"status": "UNKNOWN"},
+        {"unexpected_field": "value"},
+    ],
+)
+def test_invalid_contract_values_are_rejected(spark, updates):
+    record = loan()
+    record.update(updates)
+
+    parsed = parsed_records(spark, [record])
+
+    assert valid_records(parsed).count() == 0
+    assert rejected_records(parsed).count() == 1
+
+
+def test_paid_only_portfolio_has_undefined_ratio(spark):
+    parsed = parsed_records(spark, [loan(status="PAID")])
+    unique = valid_records(parsed).distinct()
+
+    assert_no_conflicts(unique)
+    metrics = portfolio_metrics(current_snapshot(unique)).first()
+
+    assert metrics.principal_cents == Decimal("100000")
+    assert metrics.active_principal_cents == Decimal("0")
+    assert metrics.delinquency_ratio is None
+
+
+def test_empty_portfolio(spark):
+    parsed = parsed_records(spark, [])
+    unique = valid_records(parsed).distinct()
+
+    assert_no_conflicts(unique)
+    metrics = portfolio_metrics(current_snapshot(unique)).first()
+
+    assert metrics.loan_count == 0
+    assert metrics.principal_cents == Decimal("0")
+    assert metrics.active_principal_cents == Decimal("0")
+    assert metrics.delinquent_principal_cents == Decimal("0")
+    assert metrics.delinquency_ratio is None
+```
+
+Run:
+
+```bash name=scripts/test_dataframe_lab.sh
+python -m pytest tests/test_dataframe.py -q
+```
+
+### 7.18 Why tiny `collect()` calls are acceptable in tests
+
+The test fixture contains only a handful of rows.
+
+Collecting those rows makes exact assertions straightforward.
+
+That does not justify collecting an unbounded production dataset. For large outputs, use distributed checks, bounded samples, or aggregate assertions.
+
+Also remember that DataFrame row order is not guaranteed unless explicitly ordered. The test compares a set because order is not part of the snapshot contract.
+
+### 7.19 Additional integration tests
+
+Before production use, add tests for:
+
+- Reading and writing through the intended shared filesystem.
+- Output-path collisions.
+- Failure after one output directory has been written.
+- Rerunning a failed batch.
+- Dimension join cardinality.
+- Parquet round-trip schema preservation.
+- SQL/DataFrame metric parity.
+- Missing fields and null identifiers.
+- Worker availability of the `loanbook` package.
+- Source files changing during execution.
+
+The text reader operates on decoded text. If exact invalid-UTF-8 handling and byte-level line identity are requirements, add a byte-preserving ingestion layer rather than assuming equivalence with Volume 1’s local byte reader.
+
+---
+
+# 2. Operational Checklist
+
+## Correctness
+
+- [ ] Source schema and business rules are explicit.
+- [ ] Identical duplicates are separated from conflicts.
+- [ ] Historical conflicts fail the batch.
+- [ ] Latest selection has deterministic ordering.
+- [ ] Joins preserve the intended grain.
+- [ ] Money is aggregated without floating-point approximation.
+- [ ] Decimal capacity is sufficient; decimal types also have finite limits.
+- [ ] Zero denominators have an explicit business interpretation.
+- [ ] Empty inputs behave deliberately.
+
+## Performance
+
+- [ ] Built-in expressions are preferred where suitable.
+- [ ] Driver-side collection is bounded.
+- [ ] Cache candidates are reused and measured.
+- [ ] Cache materialization cost is included in comparisons.
+- [ ] Unused caches are released.
+- [ ] Execution plans are inspected.
+- [ ] Performance claims come from representative data, not the nine-row fixture.
+
+## Operations
+
+- [ ] Input history is immutable or snapshot-controlled.
+- [ ] Output paths are unique per run.
+- [ ] Partial multi-output writes cannot be mistaken for a published batch.
+- [ ] Reject metadata has restricted access.
+- [ ] Dependencies are available on all executors.
+- [ ] Cluster paths refer to shared storage.
+- [ ] Retry and publication behavior is documented.
+
+---
+
+# 3. Interview Questions with Model Answers
+
+### 1. Why are DataFrames often faster than Python RDD pipelines?
+
+Structured expressions give Spark visibility into projections, filters, types, and aggregations. Spark can optimize these operations and often execute them without running Python code for each row.
+
+This is not a guarantee for every workload.
+
+### 2. Does defining a schema validate the business contract?
+
+No. A schema defines representation. It does not automatically enforce allowed statuses, positive amounts, version uniqueness, or exact original JSON field types.
+
+### 3. Why can `dropDuplicates` be dangerous?
+
+Key-based deduplication can choose an arbitrary surviving payload and hide conflicts. It should only be used when that behavior matches the business contract.
+
+### 4. How do you select the latest record safely?
+
+Validate records, remove identical duplicates, reject conflicting keys, and then use a deterministic ordering such as the highest source version.
+
+### 5. Why can a left join increase row counts?
+
+Multiple right-side matches produce multiple output rows for each matching left row.
+
+### 6. What is the difference between `COUNT(*)` and `COUNT(column)`?
+
+`COUNT(*)` counts rows. `COUNT(column)` counts only rows where that column is non-null.
+
+### 7. Does registering a temporary view cache a DataFrame?
+
+No. It registers a queryable name. Materialization and persistence are separate operations.
+
+### 8. When does a cache become populated?
+
+When an action computes its partitions. A limited action may populate only part of the cache.
+
+### 9. Is caching always faster?
+
+No. Cache construction, memory competition, spill, and low reuse can make it slower.
+
+### 10. Can a cache replace durable output?
+
+No. Executor-local cached blocks can be lost and are not a publication or archival mechanism.
+
+### 11. Why cast to decimal before summing?
+
+If a long-valued sum overflows, casting the already-overflowed result cannot repair it.
+
+### 12. Why is summing all loan versions incorrect for current portfolio principal?
+
+Versions describe successive snapshots of the same loan. Summing them counts historical states repeatedly.
+
+---
+
+# 4. Three-Week Study Schedule
+
+| Day | Week 5 | Week 6 | Week 7 |
+|---|---|---|---|
+| 1 | DataFrames versus RDDs | SQL and temporary views | Lazy execution and repeated actions |
+| 2 | Types, schemas, and nulls | Aggregations and conditional metrics | Cache and persistence lifecycle |
+| 3 | Strict ingestion and rejects | Join types and grain | Execution-plan inspection |
+| 4 | Duplicate/conflict handling | Windows and ordering | Cache benchmark |
+| 5 | Latest snapshot and Parquet | Nested data and collection functions | Pytest and negative cases |
+| 6 | Run the lending pipeline | Build customer/region reports | Failure and output-publication review |
+| 7 | Review and explain results | SQL/DataFrame reconciliation | Final assessment and interview practice |
+
+---
+
+# 5. Final Mini-Capstone
+
+## Build a Reconciled Lending Analytics Batch
+
+### Required outputs
+
+1. **Rejected-record dataset**
+   - Source file.
+   - Record fingerprint.
+   - Rejection reason.
+
+2. **Current loan snapshot**
+   - Exactly one row per loan.
+   - Highest valid version.
+   - No hidden version conflicts.
+
+3. **Portfolio metrics**
+   - Loan count.
+   - Total principal.
+   - Active principal.
+   - Delinquent principal.
+   - Delinquency ratio.
+
+4. **Enriched reports**
+   - Customer-level totals.
+   - Region-level totals.
+   - Missing-customer report.
+
+5. **Execution evidence**
+   - At least one formatted plan.
+   - Cache experiment with materialization cost.
+   - Automated correctness tests.
+   - A short description of publication and retry limitations.
+
+### Reconciliation equations
+
+\[
+\text{Input rows}
+=
+\text{Valid rows}
++
+\text{Rejected rows}
+\]
+
+\[
+\text{Valid rows}
+=
+\text{Unique versions}
++
+\text{Identical duplicate rows removed}
+\]
+
+\[
+\text{Unique versions}
+=
+\text{Current loans}
++
+\text{Superseded versions}
+\]
+
+For this dataset:
+
+\[
+9=5+4
+\]
+
+\[
+5=4+1
+\]
+
+\[
+4=3+1
+\]
+
+**Completion standard:** You can explain not only what each Spark operation does, but why the sequence preserves the lending contract—and demonstrate that preservation with tests.
+
+### Want me to…
+<!-- copilot:suggestions -->
+1. Hand this Weeks 5–7 guide off to the coding agent to add it to `surendhar-333/DES` and open a pull request.
+2. Create Weeks 8–11 in the same detailed format, covering Spark architecture, shuffle, joins, AQE, and skew.
