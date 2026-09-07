@@ -1,0 +1,3752 @@
+# Data Engineering Master Encyclopedia and Implementation Guide
+## Volume 1 — Distributed Systems, HDFS, MapReduce/YARN, and Spark RDDs
+
+**The complete deliverable you describe is book-length and cannot fit in one response without omitting substantial material.** Rather than present a compressed outline as an exhaustive encyclopedia, this installment develops **Weeks 1–4** with the five requested sections, executable implementations, laboratory procedures, and interview defenses.
+
+This is an **original guide aligned to the curriculum blueprint you supplied**. It is not a verified reproduction of TrendyTech’s proprietary course content. The `[cite: 1]` markers in the prompt do not include source material that would establish the exact curriculum.
+
+There are no external links in this guide.
+
+### Engineering conventions
+
+- **Reference environment:** Linux, Python 3.11, Java 11, Apache Hadoop 3.3.6, and Apache Spark 3.5.1.
+- These are reproducibility choices, **not claims about the latest available releases**.
+- Commands assume the relevant software distributions are already installed.
+- The HDFS/YARN laboratory deliberately uses one machine. It demonstrates mechanisms, not production fault tolerance.
+- Financial amounts use integer minor units—cents—not floating-point values.
+- Interview results are **hypothetical worked examples**, not claims about actual projects.
+- Code is provided in full for this installment, but has **not been executed in your environment**.
+- Production readiness also requires environment-specific security, capacity testing, disaster recovery validation, and operational approval.
+
+---
+
+# 0. Curriculum Map and Technical Corrections
+
+## 0.1 Complete coverage map
+
+The supplied syllabus contains more than 32 modules: several weeks contain multiple modules, and the capstones, interview banks, DSA, and career sections are additional modules.
+
+| Curriculum segment | Technical scope |
+|---|---|
+| Weeks 1–4 | Distributed systems, HDFS, MapReduce/YARN, Spark RDDs |
+| Weeks 5–7 | DataFrames, Spark SQL, transformations, caching |
+| Weeks 8–11 | Spark architecture, shuffle internals, joins, AQE, skew |
+| Weeks 12–13 | Git/CI/CD and Hive |
+| Milestone 1 extensions | Lending analytics capstone, Spark interview bank, DSA, career preparation |
+| Week 14 | Azure identity, resource hierarchy, RBAC, ADLS Gen2 |
+| Weeks 15–22 | Databricks architecture, compute, tables, notebooks, Delta, ingestion, governance, orchestration, deployments |
+| Weeks 23–24 | Azure Data Factory |
+| Milestone 2 extensions | Azure medallion capstone and architecture interviews |
+| Week 25 | Dimensional modeling and SCD implementations |
+| Weeks 26–27 | Structured Streaming |
+| Week 28 | Kafka |
+| Weeks 29–32 | AWS storage, query, compute, ETL, warehouses, event-driven processing |
+| Milestone 3 extensions | AWS serverless capstone and streaming fraud capstone |
+
+The nine Databricks subjects supplied for Weeks 15–22 span eight weeks. A sensible instructional allocation combines introductory architecture and compute in one week; it should not be represented as an independently verified official weekly schedule.
+
+## 0.2 Corrections that matter before implementation
+
+Several terms in the blueprint need qualification.
+
+1. **CAP does not mean “pick any two properties at all times.”**  
+   During a network partition, a distributed service cannot guarantee both linearizable consistency and availability in the theorem’s sense.
+
+2. **Spark did not universally replace MapReduce.**  
+   Spark reduced repeated materialization overhead and broadened the execution model. MapReduce remains conceptually important and can still run valid batch workloads.
+
+3. **A Delta checksum file is not a checkpoint.**  
+   Delta transaction commits are represented by log entries. Checkpoints summarize table state; their representation depends on the checkpoint protocol. CRC files are associated with checksum information, not a replacement name for checkpoints.
+
+4. **PySpark RDD storage levels differ from common Scala examples.**  
+   Python RDD records are serialized when stored. Scala-oriented names such as `MEMORY_ONLY_SER` should not be copied indiscriminately into PySpark code.
+
+5. **Spark RDD caching and DataFrame caching are not the same representation.**  
+   DataFrame caching can use a compressed columnar representation. Python RDD caching does not turn arbitrary Python objects into that representation.
+
+6. **Exactly-once processing is an end-to-end property.**  
+   Kafka transactions, a Spark checkpoint, and a transactional table sink each address specific boundaries. Their presence does not automatically make arbitrary external side effects exactly once.
+
+7. **Spark fault tolerance does not imply driver high availability.**  
+   Executor loss can often be recovered by recomputation. Driver failure commonly terminates a batch application unless external orchestration restarts it.
+
+8. **Cloud-managed feature names and capabilities are version-sensitive.**  
+   Access modes, managed table-format support, serverless networking, and pipeline APIs must be tied to a specific deployment and runtime.
+
+---
+
+# 1. Shared Laboratory: A Versioned Lending Dataset
+
+The first four weeks use the same miniature financial dataset.
+
+That continuity matters: the laboratory will move from a local transactional implementation to HDFS, then MapReduce, then Spark without changing the business definition.
+
+## 1.1 Business contract
+
+Each input record is a versioned loan snapshot.
+
+| Field | Type | Rule |
+|---|---|---|
+| `loan_id` | String | Nonempty identifier |
+| `version` | Integer | Positive, monotonically increasing per loan |
+| `customer_id` | String | Nonempty identifier |
+| `principal_cents` | Integer | Positive; at most \(10^{12}\) in this lab |
+| `status` | String | `CURRENT`, `LATE`, or `PAID` |
+
+Additional rules:
+
+- The same `(loan_id, version)` may arrive more than once.
+- Identical duplicates are harmless.
+- Two different payloads for the same `(loan_id, version)` are a **fatal source-contract violation**.
+- The highest valid version determines the current loan snapshot.
+- `PAID` loans retain their original principal for historical principal reporting.
+- For this laboratory, active principal includes `CURRENT` and `LATE` loans.
+- “Delinquent principal” means principal attached to `LATE` loans. It is **not** an accounting definition of outstanding balance.
+
+The final point prevents a common financial modeling mistake: treating an available column as if it were the exact business metric requested.
+
+## 1.2 Expected outcome
+
+The input contains:
+
+- 9 lines.
+- 5 valid records.
+- 4 rejected records.
+- 1 identical duplicate.
+- 4 unique loan versions.
+- 1 superseded version.
+- 3 current loans.
+
+Expected current snapshot:
+
+| Loan | Version | Customer | Principal cents | Status |
+|---|---:|---|---:|---|
+| L001 | 2 | C001 | 100000 | LATE |
+| L002 | 1 | C002 | 200000 | CURRENT |
+| L005 | 1 | C005 | 50000 | PAID |
+
+Expected metrics:
+
+\[
+\text{Total principal}=350000
+\]
+
+\[
+\text{Active principal}=100000+200000=300000
+\]
+
+\[
+\text{Delinquent principal}=100000
+\]
+
+\[
+\text{Delinquency ratio}=\frac{100000}{300000}=\frac13
+\]
+
+## 1.3 Project layout
+
+```text name=project-layout.txt
+de-master/
+├── pyproject.toml
+├── loanbook/
+│   ├── __init__.py
+│   ├── model.py
+│   ├── batch.py
+│   └── rdd_job.py
+├── scripts/
+│   ├── generate_input.py
+│   ├── hadoop_lab.sh
+│   ├── build_mapreduce.sh
+│   └── run_rdd.sh
+├── java/
+│   └── LoanTotals.java
+├── tests/
+│   ├── test_batch.py
+│   └── test_rdd.py
+├── data/
+├── build/
+└── out/
+```
+
+## 1.4 Python package configuration
+
+```toml name=pyproject.toml
+[build-system]
+requires = ["setuptools==69.5.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loanbook"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pyspark==3.5.1"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.2.2"
+]
+
+[tool.setuptools.packages.find]
+include = ["loanbook*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+```
+
+```python name=loanbook/__init__.py
+"""Versioned lending-data laboratory."""
+```
+
+## 1.5 Generate valid and invalid records
+
+```python name=scripts/generate_input.py
+import argparse
+import json
+from pathlib import Path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path, default=Path("data/loans.jsonl"))
+    args = parser.parse_args()
+
+    records = [
+        {
+            "loan_id": "L001",
+            "version": 1,
+            "customer_id": "C001",
+            "principal_cents": 100000,
+            "status": "CURRENT",
+        },
+        {
+            "loan_id": "L001",
+            "version": 2,
+            "customer_id": "C001",
+            "principal_cents": 100000,
+            "status": "LATE",
+        },
+        {
+            "loan_id": "L002",
+            "version": 1,
+            "customer_id": "C002",
+            "principal_cents": 200000,
+            "status": "CURRENT",
+        },
+        {
+            "loan_id": "L002",
+            "version": 1,
+            "customer_id": "C002",
+            "principal_cents": 200000,
+            "status": "CURRENT",
+        },
+        {
+            "loan_id": "L003",
+            "version": 1,
+            "customer_id": "C003",
+            "principal_cents": None,
+            "status": "CURRENT",
+        },
+        {
+            "loan_id": "L004",
+            "version": 1,
+            "customer_id": "C004",
+            "principal_cents": -100,
+            "status": "CURRENT",
+        },
+        {
+            "loan_id": "L005",
+            "version": 1,
+            "customer_id": "C005",
+            "principal_cents": 50000,
+            "status": "PAID",
+        },
+        {
+            "loan_id": "L006",
+            "version": 1,
+            "customer_id": "C006",
+            "principal_cents": "oops",
+            "status": "CURRENT",
+        },
+    ]
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open("w", encoding="utf-8", newline="\n") as handle:
+        for record in records:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        handle.write('{"loan_id": "BROKEN"\n')
+
+    print(f"Wrote 9 lines to {args.output}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+## 1.6 Shared contract enforcement
+
+A subtle Python issue: `bool` is a subclass of `int`. Consequently, `isinstance(True, int)` is true. Financial validation should not accept `true` as one cent.
+
+```python name=loanbook/model.py
+import json
+import re
+from typing import Any
+
+FIELDS = {
+    "loan_id",
+    "version",
+    "customer_id",
+    "principal_cents",
+    "status",
+}
+STATUSES = {"CURRENT", "LATE", "PAID"}
+IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+MAX_PRINCIPAL_CENTS = 10**12
+
+
+class ValidationError(ValueError):
+    """A record violates the input contract."""
+
+
+def validate_record(value: Any) -> dict:
+    if not isinstance(value, dict):
+        raise ValidationError("record_must_be_an_object")
+
+    if set(value) != FIELDS:
+        raise ValidationError("unexpected_or_missing_fields")
+
+    for field in ("loan_id", "customer_id"):
+        identifier = value[field]
+        if not isinstance(identifier, str):
+            raise ValidationError(f"{field}_must_be_a_string")
+        if not IDENTIFIER.fullmatch(identifier):
+            raise ValidationError(f"{field}_has_invalid_format")
+
+    if type(value["version"]) is not int or value["version"] <= 0:
+        raise ValidationError("version_must_be_a_positive_integer")
+
+    principal = value["principal_cents"]
+    if type(principal) is not int:
+        raise ValidationError("principal_must_be_integer_cents")
+    if not 0 < principal <= MAX_PRINCIPAL_CENTS:
+        raise ValidationError("principal_out_of_range")
+
+    if not isinstance(value["status"], str):
+        raise ValidationError("status_must_be_a_string")
+    if value["status"] not in STATUSES:
+        raise ValidationError("unsupported_status")
+
+    return {key: value[key] for key in sorted(FIELDS)}
+
+
+def parse_record(line: str) -> dict:
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError as exc:
+        raise ValidationError("malformed_json") from exc
+    return validate_record(value)
+
+
+def canonical_json(record: dict) -> str:
+    return json.dumps(record, sort_keys=True, separators=(",", ":"))
+```
+
+---
+
+# Week 1 — Big Data and Distributed Systems
+
+## Section 1: Architectural Deep Dive and Internal Mechanics
+
+### 1.1 Start with the actual scaling problem
+
+“Big data” is not a particular number of gigabytes.
+
+A system becomes operationally difficult when its workload exceeds one or more limits:
+
+- Memory required by a working set.
+- Storage capacity.
+- Sustained read/write throughput.
+- Compute time allowed by the SLA.
+- Recovery time allowed after failure.
+- Coordination capacity.
+- Cost limits.
+
+A 40 GB dataset can be difficult on a 4 GB machine. A 4 TB dataset may be routine on an appropriately designed cluster.
+
+### 1.2 Monolithic versus distributed execution
+
+```text name=week01-monolithic-vs-distributed.txt
+Single-machine system
+=====================
+
+Client
+  |
+  v
++--------------------------------------------------+
+| One operating-system failure domain               |
+|                                                  |
+| Application -> Buffer cache -> Local filesystem   |
+|      |                         -> Local disks      |
+|      +-> In-process hash tables / sort buffers    |
++--------------------------------------------------+
+
+
+Distributed system
+==================
+
+                         +--------------------+
+Client ----------------> | Coordinator        |
+                         | metadata / planning|
+                         +----------+---------+
+                                    |
+                     task assignments / RPC
+                  +-----------------+-----------------+
+                  |                 |                 |
+                  v                 v                 v
+             +---------+       +---------+       +---------+
+             | Worker A|       | Worker B|       | Worker C|
+             | memory  |<----->| memory  |<----->| memory  |
+             | spill   |       | spill   |       | spill   |
+             +----+----+       +----+----+       +----+----+
+                  |                 |                 |
+                  +-----------------+-----------------+
+                                    |
+                                    v
+                       Durable distributed storage
+```
+
+Distribution introduces:
+
+- Partial failure.
+- Network serialization.
+- Message delay and reordering.
+- Retries.
+- Duplicate execution.
+- Clock disagreement.
+- Coordination overhead.
+- More complicated observability.
+
+It should solve a measured limit, not merely satisfy an architectural fashion.
+
+### 1.3 OLTP versus OLAP
+
+| Property | OLTP | OLAP |
+|---|---|---|
+| Typical query | Fetch/update a few records | Scan and aggregate many records |
+| Access pattern | Random reads/writes | Large sequential scans |
+| Typical layout | Row-oriented | Often column-oriented |
+| Primary concern | Transaction latency and correctness | Throughput and analytical latency |
+| Modeling tendency | Normalized operational entities | Facts and dimensions |
+| Common bottleneck | Locks, indexes, write contention | Scan volume, shuffle, memory |
+
+These are workload categories, not absolute product restrictions.
+
+#### Row-oriented representation
+
+Conceptually:
+
+```text name=week01-row-vs-column-layout.txt
+Rows:
+[L001, C001, 100000, LATE]
+[L002, C002, 200000, CURRENT]
+[L005, C005,  50000, PAID]
+
+Columns:
+loan_id:         [L001, L002, L005]
+customer_id:     [C001, C002, C005]
+principal_cents: [100000, 200000, 50000]
+status:          [LATE, CURRENT, PAID]
+```
+
+A query summing principal does not need to decode customer identifiers if the storage and engine support column pruning.
+
+If selected columns account for fraction \(f\) of uncompressed bytes, the idealized scan reduction is:
+
+\[
+B_{\text{selected}} \approx fB_{\text{total}}
+\]
+
+Actual savings also depend on:
+
+- Compression.
+- Encoding.
+- Row-group metadata.
+- Predicate selectivity.
+- Page and object access overhead.
+
+### 1.4 CAP, precisely
+
+During a partition, consider a replicated account balance.
+
+```text name=week01-cap-partition.txt
+                 Network partition
+Replica A       XXXXXXXXXXXXXXXXXXX       Replica B
+
+balance = 100                            balance = 100
+
+Client 1: withdraw 80                     Client 2: withdraw 80
+```
+
+If both sides independently accept the withdrawal:
+
+- Each side remains responsive.
+- A single globally consistent account history is no longer guaranteed.
+
+If one side refuses or delays the operation:
+
+- A consistent history may be preserved.
+- Availability is sacrificed for requests on that side.
+
+Important distinctions:
+
+- CAP consistency is usually discussed as **linearizability**.
+- ACID consistency means transactions preserve application invariants.
+- Eventual consistency does not mean “anything may happen forever.”
+- A timeout does not tell the client whether the operation committed.
+
+That last issue produces a classic retry problem:
+
+```text name=week01-ambiguous-commit.txt
+Client              Service              Durable store
+  | request K          |                      |
+  |------------------->| write K              |
+  |                    |--------------------->|
+  |                    | commit succeeds      |
+  |                    |<---------------------|
+  | response lost      X                      |
+  |                                           |
+  | retries K          |                      |
+  |------------------->|                      |
+```
+
+The correct defense is generally an idempotency key and a durable result record, not “never retry.”
+
+### 1.5 Compute-storage decoupling
+
+```text name=week01-decoupling.txt
+                 Shared durable storage
+              /           |             \
+             /            |              \
+      Batch compute   SQL compute    ML compute
+       ephemeral       ephemeral      ephemeral
+```
+
+Benefits:
+
+- Independent capacity scaling.
+- Multiple engines can access the same durable data.
+- Compute can stop when idle.
+- Storage survives compute replacement.
+
+Costs:
+
+- Network transfer and remote-read latency.
+- Metadata and request overhead.
+- Cache warm-up.
+- Cross-region or cross-zone costs.
+- More careful publication and concurrency protocols.
+
+An important distinction:
+
+> Durable shared storage does not automatically supply multi-file transactions.
+
+A table protocol or explicit publication mechanism is still needed.
+
+### 1.6 Mathematical limits
+
+#### Amdahl’s law
+
+If fraction \(s\) of an application is serial, speedup on \(p\) parallel workers is bounded by:
+
+\[
+S(p)=\frac{1}{s+\frac{1-s}{p}}
+\]
+
+For \(s=0.1\) and \(p=32\):
+
+\[
+S(32)\approx7.8
+\]
+
+Not 32.
+
+#### Idealized scan-time lower bound
+
+\[
+T_{\text{scan}}\geq
+\frac{B}
+{\min(R_{\text{storage}},R_{\text{network}},R_{\text{decode}})}
+\]
+
+A 1 TB scan over a sustained 1 GB/s path has a lower bound of roughly 1,000 seconds before accounting for other work.
+
+#### Little’s law
+
+For a stable system:
+
+\[
+L=\lambda W
+\]
+
+Where:
+
+- \(L\): average requests in the system.
+- \(\lambda\): average arrival rate.
+- \(W\): average time in the system.
+
+At 500 requests/second and 0.2 seconds average latency:
+
+\[
+L=100
+\]
+
+This helps size concurrency; it does not guarantee the system remains stable under overload.
+
+---
+
+## Section 2: Production-Grade Code and Implementation
+
+This implementation separates:
+
+1. Immutable input history.
+2. Rejected-record metadata.
+3. Current dimensional state.
+4. Current loan facts.
+5. Batch identity.
+
+It provides:
+
+- SHA-256 batch identity.
+- Atomic SQLite ingestion.
+- Identical-duplicate handling.
+- Fatal conflicting-version detection.
+- Deterministic current-state selection.
+- Exact integer sums.
+- Redacted rejection logging.
+
+The SQLite implementation is appropriate for the local lab and modest single-writer workloads. It is not positioned as a distributed warehouse.
+
+```python name=loanbook/batch.py
+import argparse
+import hashlib
+import json
+import logging
+import os
+import sqlite3
+import tempfile
+from pathlib import Path
+
+from loanbook.model import ValidationError, canonical_json, parse_record
+
+LOG = logging.getLogger("loanbook.batch")
+
+DDL = """
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE IF NOT EXISTS batches (
+    batch_id TEXT PRIMARY KEY,
+    input_rows INTEGER NOT NULL,
+    valid_rows INTEGER NOT NULL,
+    rejected_rows INTEGER NOT NULL,
+    duplicate_rows INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS loan_events (
+    loan_id TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (version > 0),
+    payload TEXT NOT NULL,
+    PRIMARY KEY (loan_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS rejected_records (
+    batch_id TEXT NOT NULL,
+    line_number INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    raw_sha256 TEXT NOT NULL,
+    PRIMARY KEY (batch_id, line_number),
+    FOREIGN KEY (batch_id) REFERENCES batches(batch_id)
+);
+
+CREATE TABLE IF NOT EXISTS dim_customer (
+    customer_id TEXT PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS fact_loan (
+    loan_id TEXT PRIMARY KEY,
+    version INTEGER NOT NULL,
+    customer_id TEXT NOT NULL,
+    principal_cents INTEGER NOT NULL CHECK (principal_cents > 0),
+    status TEXT NOT NULL CHECK (status IN ('CURRENT', 'LATE', 'PAID')),
+    FOREIGN KEY (customer_id) REFERENCES dim_customer(customer_id)
+);
+"""
+
+
+def connect(database: Path) -> sqlite3.Connection:
+    database.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(
+        database,
+        timeout=30,
+        isolation_level=None,
+    )
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 30000")
+    return connection
+
+
+def ingest(input_path: Path, database: Path) -> dict:
+    connection = connect(database)
+    try:
+        connection.executescript(DDL)
+        with input_path.open("rb") as source:
+            batch_id = hashlib.file_digest(source, "sha256").hexdigest()
+            source.seek(0)
+
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                existing_batch = connection.execute(
+                    "SELECT batch_id FROM batches WHERE batch_id = ?",
+                    (batch_id,),
+                ).fetchone()
+
+                if existing_batch is not None:
+                    connection.execute("COMMIT")
+                    return {
+                        "batch_id": batch_id,
+                        "already_processed": True,
+                    }
+
+                connection.execute(
+                    """
+                    INSERT INTO batches
+                    VALUES (?, 0, 0, 0, 0)
+                    """,
+                    (batch_id,),
+                )
+
+                counts = {
+                    "input_rows": 0,
+                    "valid_rows": 0,
+                    "rejected_rows": 0,
+                    "duplicate_rows": 0,
+                }
+
+                for line_number, raw in enumerate(source, start=1):
+                    counts["input_rows"] += 1
+
+                    try:
+                        line = raw.decode("utf-8")
+                        record = parse_record(line)
+                    except (UnicodeDecodeError, ValidationError) as exc:
+                        counts["rejected_rows"] += 1
+                        reason = (
+                            "invalid_utf8"
+                            if isinstance(exc, UnicodeDecodeError)
+                            else str(exc)
+                        )
+                        connection.execute(
+                            """
+                            INSERT INTO rejected_records
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (
+                                batch_id,
+                                line_number,
+                                reason,
+                                hashlib.sha256(raw).hexdigest(),
+                            ),
+                        )
+                        continue
+
+                    counts["valid_rows"] += 1
+                    payload = canonical_json(record)
+                    key = (record["loan_id"], record["version"])
+
+                    existing_event = connection.execute(
+                        """
+                        SELECT payload
+                        FROM loan_events
+                        WHERE loan_id = ? AND version = ?
+                        """,
+                        key,
+                    ).fetchone()
+
+                    if existing_event is not None:
+                        if existing_event[0] != payload:
+                            raise ValueError(
+                                "CONFLICTING_VERSION: "
+                                f"loan={key[0]} version={key[1]}"
+                            )
+                        counts["duplicate_rows"] += 1
+                        continue
+
+                    connection.execute(
+                        """
+                        INSERT INTO loan_events
+                        (loan_id, version, payload)
+                        VALUES (?, ?, ?)
+                        """,
+                        (key[0], key[1], payload),
+                    )
+
+                latest_events = connection.execute(
+                    """
+                    SELECT e.payload
+                    FROM loan_events AS e
+                    JOIN (
+                        SELECT loan_id, MAX(version) AS version
+                        FROM loan_events
+                        GROUP BY loan_id
+                    ) AS latest
+                    ON e.loan_id = latest.loan_id
+                    AND e.version = latest.version
+                    """
+                )
+
+                for (payload,) in latest_events:
+                    record = json.loads(payload)
+
+                    connection.execute(
+                        """
+                        INSERT INTO dim_customer(customer_id)
+                        VALUES (?)
+                        ON CONFLICT(customer_id) DO NOTHING
+                        """,
+                        (record["customer_id"],),
+                    )
+
+                    connection.execute(
+                        """
+                        INSERT INTO fact_loan (
+                            loan_id,
+                            version,
+                            customer_id,
+                            principal_cents,
+                            status
+                        )
+                        VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(loan_id) DO UPDATE SET
+                            version = excluded.version,
+                            customer_id = excluded.customer_id,
+                            principal_cents = excluded.principal_cents,
+                            status = excluded.status
+                        """,
+                        (
+                            record["loan_id"],
+                            record["version"],
+                            record["customer_id"],
+                            record["principal_cents"],
+                            record["status"],
+                        ),
+                    )
+
+                connection.execute(
+                    """
+                    UPDATE batches
+                    SET input_rows = ?,
+                        valid_rows = ?,
+                        rejected_rows = ?,
+                        duplicate_rows = ?
+                    WHERE batch_id = ?
+                    """,
+                    (
+                        counts["input_rows"],
+                        counts["valid_rows"],
+                        counts["rejected_rows"],
+                        counts["duplicate_rows"],
+                        batch_id,
+                    ),
+                )
+
+                connection.execute("COMMIT")
+                result = {
+                    "batch_id": batch_id,
+                    "already_processed": False,
+                    **counts,
+                }
+                LOG.info("ingestion_complete %s", json.dumps(result))
+                return result
+
+            except BaseException:
+                if connection.in_transaction:
+                    connection.execute("ROLLBACK")
+                raise
+    finally:
+        connection.close()
+
+
+def atomic_write_lines(path: Path, lines) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        dir=path.parent,
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            for line in lines:
+                handle.write(line + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+
+
+def export_snapshot(database: Path, output: Path) -> dict:
+    connection = connect(database)
+    try:
+        connection.execute("BEGIN")
+
+        columns = [
+            "loan_id",
+            "version",
+            "customer_id",
+            "principal_cents",
+            "status",
+        ]
+
+        def json_lines():
+            cursor = connection.execute(
+                """
+                SELECT loan_id, version, customer_id, principal_cents, status
+                FROM fact_loan
+                ORDER BY loan_id
+                """
+            )
+            for row in cursor:
+                yield canonical_json(dict(zip(columns, row)))
+
+        atomic_write_lines(output / "current.jsonl", json_lines())
+
+        def tsv_lines():
+            cursor = connection.execute(
+                """
+                SELECT loan_id, customer_id, principal_cents, status, version
+                FROM fact_loan
+                ORDER BY loan_id
+                """
+            )
+            for row in cursor:
+                yield "\t".join(str(value) for value in row)
+
+        atomic_write_lines(output / "current.tsv", tsv_lines())
+
+        row = connection.execute(
+            """
+            SELECT
+                COUNT(*),
+                COALESCE(SUM(principal_cents), 0),
+                COALESCE(SUM(
+                    CASE WHEN status IN ('CURRENT', 'LATE')
+                    THEN principal_cents ELSE 0 END
+                ), 0),
+                COALESCE(SUM(
+                    CASE WHEN status = 'LATE'
+                    THEN principal_cents ELSE 0 END
+                ), 0)
+            FROM fact_loan
+            """
+        ).fetchone()
+
+        metrics = dict(
+            zip(
+                [
+                    "loan_count",
+                    "principal_cents",
+                    "active_principal_cents",
+                    "delinquent_principal_cents",
+                ],
+                row,
+            )
+        )
+
+        connection.execute("COMMIT")
+        return metrics
+    except BaseException:
+        if connection.in_transaction:
+            connection.execute("ROLLBACK")
+        raise
+    finally:
+        connection.close()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--database", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+    try:
+        result = ingest(args.input, args.database)
+        metrics = export_snapshot(args.database, args.output)
+        print(json.dumps({"ingestion": result, "metrics": metrics}, indent=2))
+    except Exception:
+        LOG.exception("batch_failed")
+        raise
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### Transaction and publication boundaries
+
+The database ingestion is one transaction.
+
+The two exported files are **individually replaced atomically on a suitable local filesystem**, but they are not published as a single atomic multi-file snapshot.
+
+A production multi-file publication design should use:
+
+1. An immutable run directory.
+2. Complete data-file writes.
+3. Reconciliation.
+4. A commit manifest.
+5. Readers that only consume committed runs.
+
+The Week 4 implementation demonstrates the manifest approach.
+
+Also, the batch hash assumes an immutable source file during the hash-and-read operation. Production ingestion should land files immutably before processing.
+
+---
+
+## Section 3: Production Gotchas, Failure Modes, and Tuning
+
+### Failure: duplicate processing after a timeout
+
+**Symptoms**
+
+- An orchestrator retries.
+- Counts double.
+- Financial totals drift.
+
+**Diagnostic workflow**
+
+1. Identify the logical batch key.
+2. Check whether the first attempt committed.
+3. Compare source record identities.
+4. Inspect whether the sink uses insert-only writes or deterministic upserts.
+5. Verify that the idempotency record and business writes share a transaction.
+
+**Defense**
+
+- Stable batch identity.
+- Stable record identity.
+- Transactional batch ledger.
+- Idempotent sink behavior.
+
+A random run identifier alone is not an idempotency key.
+
+### Failure: “latest record” is nondeterministic
+
+Using arrival order is unsafe because:
+
+- Files may arrive out of order.
+- Retries may replay old records.
+- Partition iteration order is not stable.
+- Distributed reductions can execute in different tree shapes.
+
+Use a source-controlled ordering field, such as a version or CDC sequence.
+
+If two different payloads share the same source version, do not silently select whichever arrives first.
+
+### Failure: money represented as binary floating point
+
+For many decimal fractions:
+
+\[
+\text{binary representation is not exact}
+\]
+
+Use:
+
+- Integer minor units when the currency scale is fixed.
+- Decimal types with explicit precision and scale when necessary.
+
+Cross-currency calculations additionally require:
+
+- Currency code.
+- Exchange-rate source.
+- Rate effective time.
+- Rounding policy.
+- Accounting treatment.
+
+### Failure: scaling compute when storage is saturated
+
+If the storage service sustains 1 GB/s and each worker demands 200 MB/s, more than approximately five fully active readers may not improve scan throughput.
+
+Measure:
+
+- Bytes read per second.
+- Request latency.
+- CPU utilization.
+- Decode CPU.
+- Network utilization.
+- Queue depth.
+
+Do not infer an I/O bottleneck solely from low CPU.
+
+### Local implementation limitations
+
+- SQLite serializes writers.
+- The fact refresh scans current history; a large deployment should incrementally update touched keys.
+- Rejected payloads are represented by hashes and reasons, not copied into logs.
+- A production quarantine store would retain encrypted raw records under restricted access.
+- Very large integer totals can exceed SQLite’s signed 64-bit integer range.
+- Deletion/tombstone semantics are not part of this input contract.
+
+---
+
+## Section 4: Step-by-Step Hands-On Lab
+
+### Scenario
+
+A lending platform receives repeated daily snapshots. Retries and malformed records have caused inconsistent portfolio totals.
+
+### Setup
+
+```bash name=scripts/setup_python.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install -e '.[test]'
+
+mkdir -p data out build
+python scripts/generate_input.py --output data/loans.jsonl
+```
+
+For a disconnected environment, install the same pinned dependencies from a pre-provisioned package artifact store or local wheel directory.
+
+### Execute ingestion
+
+```bash name=scripts/run_batch.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+source .venv/bin/activate
+
+python -m loanbook.batch \
+  --input data/loans.jsonl \
+  --database out/portfolio.db \
+  --output out/snapshot
+
+python -m loanbook.batch \
+  --input data/loans.jsonl \
+  --database out/portfolio.db \
+  --output out/snapshot
+```
+
+The second ingestion must report `already_processed: true`.
+
+### Automated verification
+
+```python name=tests/test_batch.py
+import json
+import sqlite3
+from pathlib import Path
+
+import pytest
+
+from loanbook.batch import export_snapshot, ingest
+from loanbook.model import ValidationError, validate_record
+
+
+def record(
+    loan_id="L001",
+    version=1,
+    principal_cents=100000,
+    status="CURRENT",
+):
+    return {
+        "loan_id": loan_id,
+        "version": version,
+        "customer_id": "C001",
+        "principal_cents": principal_cents,
+        "status": status,
+    }
+
+
+def write_records(path: Path, records: list[dict]) -> None:
+    path.write_text(
+        "".join(json.dumps(value) + "\n" for value in records),
+        encoding="utf-8",
+    )
+
+
+def test_batch_is_idempotent(tmp_path):
+    source = tmp_path / "input.jsonl"
+    database = tmp_path / "portfolio.db"
+    write_records(source, [record(), record()])
+
+    first = ingest(source, database)
+    second = ingest(source, database)
+
+    assert first["valid_rows"] == 2
+    assert first["duplicate_rows"] == 1
+    assert second["already_processed"] is True
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM loan_events"
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM fact_loan"
+        ).fetchone()[0] == 1
+
+
+def test_higher_version_wins_independent_of_order(tmp_path):
+    source = tmp_path / "input.jsonl"
+    database = tmp_path / "portfolio.db"
+    write_records(
+        source,
+        [
+            record(version=2, status="LATE"),
+            record(version=1, status="CURRENT"),
+        ],
+    )
+
+    ingest(source, database)
+
+    with sqlite3.connect(database) as connection:
+        row = connection.execute(
+            "SELECT version, status FROM fact_loan"
+        ).fetchone()
+        assert row == (2, "LATE")
+
+
+def test_conflicting_version_rolls_back_batch(tmp_path):
+    source = tmp_path / "input.jsonl"
+    database = tmp_path / "portfolio.db"
+    write_records(
+        source,
+        [
+            record(principal_cents=100000),
+            record(principal_cents=200000),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="CONFLICTING_VERSION"):
+        ingest(source, database)
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM loan_events"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM batches"
+        ).fetchone()[0] == 0
+
+
+def test_boolean_is_not_money():
+    with pytest.raises(ValidationError, match="integer_cents"):
+        validate_record(record(principal_cents=True))
+
+
+def test_full_fixture_totals(tmp_path):
+    source = Path("data/loans.jsonl")
+    database = tmp_path / "portfolio.db"
+
+    result = ingest(source, database)
+    metrics = export_snapshot(database, tmp_path / "snapshot")
+
+    assert result["input_rows"] == 9
+    assert result["valid_rows"] == 5
+    assert result["rejected_rows"] == 4
+    assert result["duplicate_rows"] == 1
+
+    assert metrics == {
+        "loan_count": 3,
+        "principal_cents": 350000,
+        "active_principal_cents": 300000,
+        "delinquent_principal_cents": 100000,
+    }
+```
+
+```bash name=scripts/test_batch.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+source .venv/bin/activate
+python scripts/generate_input.py
+pytest -q tests/test_batch.py
+```
+
+### Optimization pass
+
+Compare the full current-state refresh with a design that refreshes only affected loan IDs.
+
+If:
+
+- Historical versions = \(H\).
+- Changed loans per batch = \(C\).
+- \(C \ll H\).
+
+Then an indexed incremental update can avoid repeatedly scanning most historical records.
+
+Correctness comes first: optimization must not change duplicate handling, version ordering, or transaction boundaries.
+
+---
+
+## Section 5: Senior/Staff Interview Defense
+
+### Scenario 1: “Should we move a 600 GB daily pipeline to a distributed engine?”
+
+**Situation:** A hypothetical 600 GB job takes 95 minutes on one server, while the SLA is 45 minutes.
+
+**Task:** Reduce completion time without introducing unnecessary operational complexity.
+
+**Action:**
+
+1. Measure scan throughput, CPU utilization, and time spent in serial sections.
+2. Find that parsing and aggregation are parallelizable, but a 12-minute serial export remains.
+3. Improve the export first.
+4. Benchmark distributed execution with equal business logic.
+5. Include infrastructure cost and recovery behavior.
+
+**Result:** In the hypothetical benchmark, runtime falls from 95 to 34 minutes, while daily compute cost increases from 8 to 11 currency units.
+
+**Trap warning:** “The data is big, so Spark is automatically correct.”  
+A staff-level answer explains the bottleneck, alternatives, and measured tradeoff.
+
+### Scenario 2: “A client timed out. Can it safely retry a payment-related update?”
+
+**Situation:** The service may have committed before the response disappeared.
+
+**Task:** Prevent a repeated request from applying the update twice.
+
+**Action:**
+
+- Require an idempotency key.
+- Store the request fingerprint and committed result transactionally.
+- Return the original result for identical retries.
+- Reject reuse of the key with a different payload.
+
+**Result:** In a hypothetical fault-injection test of 100,000 requests with 5% response loss, the final ledger contains exactly 100,000 logical updates.
+
+**Trap warning:** A timeout is not proof of rollback.
+
+---
+
+# Week 2 — HDFS Internals and Data Lake Storage
+
+## Section 1: Architectural Deep Dive and Internal Mechanics
+
+### 2.1 HDFS separates metadata from file data
+
+```text name=week02-hdfs-architecture.txt
+                         Metadata RPC
+Client --------------------------------------> NameNode
+  |                                             |
+  |                                             | Namespace
+  |                                             | File -> blocks
+  |                                             | Block locations
+  |
+  | Data transfer
+  v
+DataNode A ----------> DataNode B ----------> DataNode C
+   packet stream        replication           replication
+  ^                                             |
+  +--------------- acknowledgement chain -------+
+```
+
+The NameNode does not normally proxy application file bytes.
+
+It manages:
+
+- Directory hierarchy.
+- File metadata.
+- Permissions.
+- File-to-block mapping.
+- Replication policy.
+- Leases for files under construction.
+- Knowledge of DataNode block locations.
+
+DataNodes manage:
+
+- Block files.
+- Checksum metadata.
+- Block reports.
+- Heartbeats.
+- Client data transfer.
+- Replication and deletion work assigned by the NameNode.
+
+### 2.2 File-to-block mapping
+
+For a file of size \(F\) and configured block size \(B\):
+
+\[
+N_{\text{blocks}}=\left\lceil\frac{F}{B}\right\rceil
+\]
+
+Example:
+
+\[
+F=300\text{ MiB}, \quad B=128\text{ MiB}
+\]
+
+Logical block lengths:
+
+- 128 MiB.
+- 128 MiB.
+- 44 MiB.
+
+The last block does not need to occupy 128 MiB of actual file data on disk.
+
+### 2.3 Replication and capacity
+
+With replication factor \(r\):
+
+\[
+\text{Raw data bytes}\approx rF
+\]
+
+Usable storage must also reserve space for:
+
+- Filesystem overhead.
+- Checksums.
+- Temporary data.
+- Re-replication.
+- Failed disks or nodes.
+- Operational headroom.
+
+For raw storage \(R\), replication \(r\), and utilization ceiling \(u\):
+
+\[
+\text{Logical capacity}\approx\frac{Ru}{r}
+\]
+
+At 300 TB raw, replication 3, utilization ceiling 70%:
+
+\[
+\frac{300\times0.7}{3}=70\text{ TB}
+\]
+
+### 2.4 Write pipeline
+
+A simplified sequence:
+
+1. Client asks the NameNode to create a file.
+2. NameNode validates namespace and permissions.
+3. Client obtains targets for a block.
+4. Client sends checksummed packets to the first DataNode.
+5. The first forwards packets to the next.
+6. Acknowledgements flow backward.
+7. Client advances after acknowledgement.
+8. On pipeline failure, the client attempts pipeline recovery.
+9. File close finalizes the write.
+
+Do not confuse:
+
+- A packet acknowledgement.
+- A client flush.
+- Synchronization guarantees.
+- File close.
+- Application-level transaction commit.
+
+They establish different boundaries.
+
+### 2.5 Read path
+
+1. Client asks the NameNode for block locations.
+2. Client selects a suitable replica.
+3. Client reads directly from the DataNode.
+4. Client validates checksums.
+5. On corruption or failure, it can attempt another replica.
+
+Replication protects availability only when an intact replica survives.
+
+A perfectly replicated wrong answer is still wrong.
+
+### 2.6 NameNode persistence and HA
+
+```text name=week02-namenode-ha.txt
+                     Clients
+                        |
+                Active NameNode
+                  /          \
+          namespace state    edit records
+                                  |
+                         JournalNode quorum
+                                  |
+                           Standby NameNode
+                                  |
+                             failover state
+```
+
+Core concepts:
+
+- **FsImage:** persisted namespace snapshot.
+- **Edit log:** changes after a snapshot.
+- **Checkpointing:** merges image and edits.
+- **Standby NameNode:** can participate in an HA design.
+- **Fencing:** prevents an old active from continuing to act as active.
+
+A Secondary NameNode is primarily a checkpointing role. It is not simply “the backup server that automatically takes over.”
+
+### 2.7 Small files
+
+A 1 KB file and a 1 GB file each need namespace entries.
+
+Many tiny files create pressure through:
+
+- NameNode metadata.
+- Listing operations.
+- Task scheduling.
+- File-open overhead.
+- Reader initialization.
+- Commit metadata.
+
+Do not use a universal “metadata bytes per file” constant for capacity planning. Measure the deployed Hadoop version and namespace composition.
+
+### 2.8 Data lake zones
+
+```text name=week02-lake-zones.txt
+Source
+  |
+  v
+Landing
+  | immutable source delivery
+  v
+Bronze
+  | source-aligned, replayable records
+  +---------------------> Quarantine
+  |                         invalid / restricted
+  v
+Silver
+  | validated, deduplicated, conformed
+  v
+Gold
+    business-grain facts, dimensions, aggregates
+```
+
+Zones are not just directory names.
+
+Each needs a contract covering:
+
+- Ownership.
+- Access.
+- Retention.
+- Schema policy.
+- Replay rules.
+- Quality requirements.
+- Publication semantics.
+
+---
+
+## Section 2: Production-Grade Code and Implementation
+
+The following script creates an isolated pseudo-distributed HDFS/YARN configuration.
+
+**Security boundary:** It uses simple authentication and explicitly disables HDFS permission enforcement for the local exercise. Run it only on a disposable, network-isolated development machine. This is not a production security configuration.
+
+Prerequisites:
+
+- `JAVA_HOME` points to Java 11.
+- `HADOOP_HOME` points to Hadoop 3.3.6.
+- At least roughly 12 GB RAM for this combined lab.
+- No conflicting Hadoop daemons using the configured ports.
+
+```bash name=scripts/hadoop_lab.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+ACTION="${1:-}"
+: "${JAVA_HOME:?Set JAVA_HOME to a Java 11 installation}"
+: "${HADOOP_HOME:?Set HADOOP_HOME to Hadoop 3.3.6}"
+
+export LAB_ROOT="${LAB_ROOT:-$HOME/de-master-hadoop-lab}"
+export HADOOP_CONF_DIR="$LAB_ROOT/conf"
+export HADOOP_LOG_DIR="$LAB_ROOT/logs"
+export HADOOP_PID_DIR="$LAB_ROOT/pids"
+
+mkdir -p \
+  "$HADOOP_CONF_DIR" \
+  "$HADOOP_LOG_DIR" \
+  "$HADOOP_PID_DIR" \
+  "$LAB_ROOT/namenode" \
+  "$LAB_ROOT/datanode" \
+  "$LAB_ROOT/yarn-local" \
+  "$LAB_ROOT/yarn-logs"
+
+write_configuration() {
+  cat > "$HADOOP_CONF_DIR/hadoop-env.sh" <<EOF
+export JAVA_HOME="$JAVA_HOME"
+export HADOOP_HOME="$HADOOP_HOME"
+export HADOOP_CONF_DIR="$HADOOP_CONF_DIR"
+export HADOOP_LOG_DIR="$HADOOP_LOG_DIR"
+export HADOOP_PID_DIR="$HADOOP_PID_DIR"
+export HADOOP_HEAPSIZE_MAX=1024
+EOF
+
+  cat > "$HADOOP_CONF_DIR/core-site.xml" <<EOF
+<?xml version="1.0"?>
+<configuration>
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://127.0.0.1:9000</value>
+  </property>
+  <property>
+    <name>hadoop.tmp.dir</name>
+    <value>$LAB_ROOT/tmp</value>
+  </property>
+  <property>
+    <name>hadoop.security.authentication</name>
+    <value>simple</value>
+  </property>
+</configuration>
+EOF
+
+  cat > "$HADOOP_CONF_DIR/hdfs-site.xml" <<EOF
+<?xml version="1.0"?>
+<configuration>
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file://$LAB_ROOT/namenode</value>
+  </property>
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file://$LAB_ROOT/datanode</value>
+  </property>
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+  <property>
+    <name>dfs.blocksize</name>
+    <value>134217728</value>
+  </property>
+  <property>
+    <name>dfs.permissions.enabled</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>dfs.namenode.rpc-bind-host</name>
+    <value>127.0.0.1</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-address</name>
+    <value>127.0.0.1:9870</value>
+  </property>
+  <property>
+    <name>dfs.datanode.address</name>
+    <value>127.0.0.1:9866</value>
+  </property>
+  <property>
+    <name>dfs.datanode.ipc.address</name>
+    <value>127.0.0.1:9867</value>
+  </property>
+  <property>
+    <name>dfs.datanode.http.address</name>
+    <value>127.0.0.1:9864</value>
+  </property>
+</configuration>
+EOF
+
+  cat > "$HADOOP_CONF_DIR/yarn-site.xml" <<EOF
+<?xml version="1.0"?>
+<configuration>
+  <property>
+    <name>yarn.resourcemanager.hostname</name>
+    <value>localhost</value>
+  </property>
+  <property>
+    <name>yarn.resourcemanager.bind-host</name>
+    <value>127.0.0.1</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.bind-host</name>
+    <value>127.0.0.1</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>8192</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.resource.cpu-vcores</name>
+    <value>4</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.minimum-allocation-mb</name>
+    <value>512</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.maximum-allocation-mb</name>
+    <value>8192</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.vmem-check-enabled</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.local-dirs</name>
+    <value>$LAB_ROOT/yarn-local</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.log-dirs</name>
+    <value>$LAB_ROOT/yarn-logs</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
+    <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.env-whitelist</name>
+    <value>JAVA_HOME,HADOOP_COMMON_HOME,HADOOP_HDFS_HOME,HADOOP_CONF_DIR,HADOOP_YARN_HOME,HADOOP_MAPRED_HOME,PATH,LANG,TZ</value>
+  </property>
+  <property>
+    <name>yarn.log-aggregation-enable</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.remote-app-log-dir</name>
+    <value>/tmp/yarn-logs</value>
+  </property>
+</configuration>
+EOF
+
+  cat > "$HADOOP_CONF_DIR/mapred-site.xml" <<EOF
+<?xml version="1.0"?>
+<configuration>
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+  <property>
+    <name>mapreduce.application.classpath</name>
+    <value>$HADOOP_HOME/share/hadoop/mapreduce/*,$HADOOP_HOME/share/hadoop/mapreduce/lib/*</value>
+  </property>
+  <property>
+    <name>yarn.app.mapreduce.am.env</name>
+    <value>HADOOP_MAPRED_HOME=$HADOOP_HOME</value>
+  </property>
+  <property>
+    <name>mapreduce.map.env</name>
+    <value>HADOOP_MAPRED_HOME=$HADOOP_HOME</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.env</name>
+    <value>HADOOP_MAPRED_HOME=$HADOOP_HOME</value>
+  </property>
+  <property>
+    <name>yarn.app.mapreduce.am.resource.mb</name>
+    <value>1024</value>
+  </property>
+  <property>
+    <name>yarn.app.mapreduce.am.command-opts</name>
+    <value>-Xmx768m</value>
+  </property>
+  <property>
+    <name>mapreduce.map.memory.mb</name>
+    <value>1024</value>
+  </property>
+  <property>
+    <name>mapreduce.map.java.opts</name>
+    <value>-Xmx768m</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.memory.mb</name>
+    <value>1024</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.java.opts</name>
+    <value>-Xmx768m</value>
+  </property>
+</configuration>
+EOF
+}
+
+case "$ACTION" in
+  init)
+    write_configuration
+    if [[ -f "$LAB_ROOT/namenode/current/VERSION" ]]; then
+      printf 'NameNode already initialized; refusing to reformat.\n'
+    else
+      "$HADOOP_HOME/bin/hdfs" namenode -format -nonInteractive
+    fi
+    ;;
+
+  start)
+    [[ -f "$LAB_ROOT/namenode/current/VERSION" ]] || {
+      printf 'Run init before start.\n' >&2
+      exit 1
+    }
+
+    "$HADOOP_HOME/bin/hdfs" --daemon start namenode
+    "$HADOOP_HOME/bin/hdfs" --daemon start datanode
+
+    ready=0
+    for _ in $(seq 1 60); do
+      if "$HADOOP_HOME/bin/hdfs" dfs -ls / >/dev/null 2>&1; then
+        ready=1
+        break
+      fi
+      sleep 1
+    done
+    [[ "$ready" == "1" ]] || {
+      printf 'HDFS did not become ready; inspect %s\n' "$HADOOP_LOG_DIR" >&2
+      exit 1
+    }
+
+    "$HADOOP_HOME/bin/hdfs" dfsadmin -safemode wait
+    "$HADOOP_HOME/bin/hdfs" dfs -mkdir -p \
+      "/user/$USER" \
+      /lake/landing \
+      /lake/bronze \
+      /lake/silver \
+      /lake/gold \
+      /lake/quarantine \
+      /tmp/yarn-logs
+
+    "$HADOOP_HOME/bin/yarn" --daemon start resourcemanager
+    "$HADOOP_HOME/bin/yarn" --daemon start nodemanager
+    ;;
+
+  stop)
+    "$HADOOP_HOME/bin/yarn" --daemon stop nodemanager
+    "$HADOOP_HOME/bin/yarn" --daemon stop resourcemanager
+    "$HADOOP_HOME/bin/hdfs" --daemon stop datanode
+    "$HADOOP_HOME/bin/hdfs" --daemon stop namenode
+    ;;
+
+  env)
+    printf 'export LAB_ROOT=%q\n' "$LAB_ROOT"
+    printf 'export HADOOP_CONF_DIR=%q\n' "$HADOOP_CONF_DIR"
+    printf 'export HADOOP_LOG_DIR=%q\n' "$HADOOP_LOG_DIR"
+    printf 'export HADOOP_PID_DIR=%q\n' "$HADOOP_PID_DIR"
+    ;;
+
+  *)
+    printf 'Usage: %s {init|start|stop|env}\n' "$0" >&2
+    exit 2
+    ;;
+esac
+```
+
+The filesystem scheme strings in these configurations are local service identifiers, not external references.
+
+---
+
+## Section 3: Production Gotchas, Failure Modes, and Tuning
+
+### Failure: under-replicated blocks
+
+**Possible causes**
+
+- DataNode failure.
+- Insufficient eligible nodes.
+- Disk failure.
+- Rack-placement constraints.
+- Decommissioning.
+- Re-replication backlog.
+
+**Diagnostic sequence**
+
+1. Inspect live/dead DataNode counts.
+2. Inspect missing and under-replicated blocks.
+3. Check DataNode volume failures.
+4. Check capacity and placement constraints.
+5. Inspect network throughput during recovery.
+6. Verify whether affected data remains readable.
+
+Useful commands:
+
+```bash name=scripts/hdfs_diagnostics.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${HADOOP_HOME:?}"
+: "${HADOOP_CONF_DIR:?}"
+
+"$HADOOP_HOME/bin/hdfs" dfsadmin -report
+"$HADOOP_HOME/bin/hdfs" fsck /lake -files -blocks -locations
+"$HADOOP_HOME/bin/hdfs" dfs -count -q -h /lake
+"$HADOOP_HOME/bin/hdfs" dfs -du -h /lake
+```
+
+Do not “fix” under-replication by lowering the replication factor without understanding the durability consequence.
+
+### Failure: NameNode heap pressure
+
+Inspect:
+
+- File and block counts.
+- Heap occupancy after full GC.
+- GC pause duration.
+- RPC queue latency.
+- Namespace growth.
+- Listing-heavy workloads.
+
+A small-file compaction policy may be more effective than merely increasing heap.
+
+### Failure: mistaken recovery action
+
+**Never reformat the NameNode as routine failure recovery.**
+
+Formatting creates a new filesystem identity and namespace. It is not equivalent to restarting a database.
+
+### Failure: one-machine replication misconception
+
+Setting replication to 3 on one DataNode does not create three independently durable copies.
+
+The lab will show desired replication exceeding available replicas.
+
+### Production security requirements
+
+A real deployment would evaluate:
+
+- Kerberos authentication.
+- Authorization and least privilege.
+- Encryption in transit.
+- Encryption at rest.
+- Key management.
+- Service isolation.
+- Audit collection.
+- NameNode HA.
+- Recovery testing.
+
+The local script intentionally does not claim to implement these controls.
+
+---
+
+## Section 4: Step-by-Step Hands-On Lab
+
+### Scenario
+
+Move the validated lending snapshot to HDFS and demonstrate block metadata, integrity, and unavailable replication capacity.
+
+### Initialize and start
+
+```bash name=scripts/start_hadoop.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+bash scripts/hadoop_lab.sh init
+eval "$(bash scripts/hadoop_lab.sh env)"
+bash scripts/hadoop_lab.sh start
+```
+
+### Upload immutable batch files
+
+```bash name=scripts/upload_hdfs.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${HADOOP_HOME:?}"
+eval "$(bash scripts/hadoop_lab.sh env)"
+
+RAW_BATCH="$(sha256sum data/loans.jsonl | awk '{print $1}')"
+CURRENT_BATCH="$(sha256sum out/snapshot/current.jsonl | awk '{print $1}')"
+
+RAW_DIRECTORY="/lake/bronze/loans/$RAW_BATCH"
+CURRENT_DIRECTORY="/lake/silver/loans/$CURRENT_BATCH"
+
+"$HADOOP_HOME/bin/hdfs" dfs -mkdir -p \
+  "$RAW_DIRECTORY" \
+  "$CURRENT_DIRECTORY"
+
+upload_once() {
+  local source="$1"
+  local target="$2"
+
+  if "$HADOOP_HOME/bin/hdfs" dfs -test -e "$target"; then
+    printf 'Already exists: %s\n' "$target"
+  else
+    "$HADOOP_HOME/bin/hdfs" dfs -put "$source" "$target"
+  fi
+}
+
+upload_once data/loans.jsonl "$RAW_DIRECTORY/loans.jsonl"
+upload_once out/snapshot/current.jsonl "$CURRENT_DIRECTORY/current.jsonl"
+upload_once out/snapshot/current.tsv "$CURRENT_DIRECTORY/current.tsv"
+
+printf 'export RAW_DIRECTORY=%q\n' "$RAW_DIRECTORY" > out/hdfs_paths.env
+printf 'export CURRENT_DIRECTORY=%q\n' "$CURRENT_DIRECTORY" >> out/hdfs_paths.env
+```
+
+### Verify data integrity and block metadata
+
+```bash name=scripts/verify_hdfs.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${HADOOP_HOME:?}"
+eval "$(bash scripts/hadoop_lab.sh env)"
+source out/hdfs_paths.env
+
+LOCAL_HASH="$(sha256sum out/snapshot/current.jsonl | awk '{print $1}')"
+REMOTE_HASH="$(
+  "$HADOOP_HOME/bin/hdfs" dfs -cat \
+    "$CURRENT_DIRECTORY/current.jsonl" |
+    sha256sum |
+    awk '{print $1}'
+)"
+
+[[ "$LOCAL_HASH" == "$REMOTE_HASH" ]]
+
+"$HADOOP_HOME/bin/hdfs" fsck \
+  "$CURRENT_DIRECTORY/current.jsonl" \
+  -files -blocks -locations
+
+"$HADOOP_HOME/bin/hdfs" dfs -setrep \
+  3 "$CURRENT_DIRECTORY/current.jsonl"
+
+DESIRED_REPLICATION="$(
+  "$HADOOP_HOME/bin/hdfs" dfs -stat '%r' \
+    "$CURRENT_DIRECTORY/current.jsonl"
+)"
+[[ "$DESIRED_REPLICATION" == "3" ]]
+
+"$HADOOP_HOME/bin/hdfs" fsck \
+  "$CURRENT_DIRECTORY/current.jsonl" \
+  -files -blocks -locations
+
+"$HADOOP_HOME/bin/hdfs" dfs -setrep \
+  -w 1 "$CURRENT_DIRECTORY/current.jsonl"
+
+printf 'Content hash verified; replication restored to 1.\n'
+```
+
+Do not use `-w 3` in this single-DataNode exercise: the requested replication cannot be satisfied.
+
+### Optimization experiment
+
+Compare:
+
+- 10,000 individual small files.
+- A smaller number of larger files containing the same records.
+
+Measure:
+
+- Listing time.
+- Job startup time.
+- Number of input tasks.
+- End-to-end read time.
+- NameNode RPC activity.
+
+Do not compare only file bytes; metadata and scheduling are the point of the experiment.
+
+---
+
+## Section 5: Senior/Staff Interview Defense
+
+### Scenario 1: “We have plenty of disk, but HDFS is slow.”
+
+**Situation:** A hypothetical lake contains 70 million small files while consuming only 25% of raw storage.
+
+**Task:** Restore predictable listing and batch startup performance.
+
+**Action:**
+
+- Inspect namespace and GC metrics.
+- Identify high-frequency creation of kilobyte files.
+- Compact data into larger immutable files.
+- Change ingestion to batch publication.
+- Preserve source lineage in metadata rather than filenames alone.
+
+**Result:** In a hypothetical test, file count falls from 70 million to 700,000 and planning time falls from 18 minutes to 70 seconds.
+
+**Trap warning:** Available disk capacity does not imply available metadata capacity.
+
+### Scenario 2: “Does replication factor 3 guarantee no data loss?”
+
+**Situation:** Three replicas are placed within an inadequately isolated failure domain.
+
+**Task:** Evaluate durability beyond the configuration value.
+
+**Action:**
+
+- Inspect actual placement.
+- Evaluate rack, power, network, and regional risks.
+- Test corruption detection and recovery.
+- Establish backup or replication outside the primary failure domain.
+- Verify recovery point and recovery time objectives.
+
+**Result:** A hypothetical disaster-recovery test restores the required dataset in 42 minutes against a 60-minute recovery objective.
+
+**Trap warning:** Replication is not backup, and desired replication is not actual replication.
+
+---
+
+# Week 3 — MapReduce, YARN, and Distributed Execution
+
+## Section 1: Architectural Deep Dive and Internal Mechanics
+
+### 3.1 MapReduce execution
+
+```text name=week03-mapreduce-flow.txt
+Input files
+    |
+    v
+InputFormat -> InputSplits -> RecordReaders
+    |
+    v
+Mapper processes
+    |
+    | key/value records
+    v
+Serialization + partitioning + in-memory sort buffer
+    |
+    v
+Spill files + optional combiner + merge
+    |
+    | reducer fetches its partition from each mapper
+    v
+Shuffle network transfer
+    |
+    v
+Reducer-side merge and grouping
+    |
+    v
+Reducer
+    |
+    v
+OutputFormat + OutputCommitter
+    |
+    v
+Committed result files
+```
+
+### 3.2 Blocks are not identical to input splits
+
+- HDFS blocks are storage units.
+- Input splits are logical units of processing.
+- Record readers determine record boundaries.
+- Input formats decide splitting behavior.
+
+A line may cross an HDFS block boundary without becoming two business records.
+
+Compressed files complicate splitting:
+
+- Some codecs and formats are splittable.
+- Others force a large file to be processed by one task.
+
+A large unsplittable compressed input can produce a straggler regardless of the nominal HDFS block size.
+
+### 3.3 Partitioning and grouping
+
+For \(R\) reducers, a common partitioning scheme is:
+
+\[
+p(k)=(hash(k)\ \&\ 0x7fffffff)\bmod R
+\]
+
+Equal keys must reach the same reducer for correct grouping.
+
+However:
+
+> Equal partition number does not mean equal key.
+
+Reducers process multiple grouped keys within their partition.
+
+### 3.4 Map output serialization
+
+Hadoop `Writable` types define binary serialization.
+
+For this lab:
+
+- `Text` represents UTF-8 text with encoded length information.
+- `LongWritable` represents a signed 64-bit integer.
+- Mapper output is serialized before buffering and transfer.
+- Sort and grouping comparators govern key order and equality.
+
+Memory includes more than raw business values:
+
+- Serialized bytes.
+- Record metadata.
+- Sort structures.
+- Framework buffers.
+- JVM object overhead.
+
+### 3.5 Combiner correctness
+
+A combiner is an optional optimization.
+
+The framework may invoke it:
+
+- Zero times.
+- Once.
+- Multiple times.
+
+Therefore, correctness must not depend on its execution.
+
+Safe example:
+
+\[
+sum(sum(A),sum(B))=sum(A\cup B)
+\]
+
+Unsafe naive average:
+
+\[
+avg(avg(A),avg(B))
+\]
+
+This fails when group sizes differ.
+
+Correct average state:
+
+\[
+(sum,count)
+\]
+
+Merge:
+
+\[
+(s_1,c_1)\oplus(s_2,c_2)=(s_1+s_2,c_1+c_2)
+\]
+
+Finalize:
+
+\[
+average=\frac{sum}{count}
+\]
+
+### 3.6 YARN responsibilities
+
+```text name=week03-yarn-architecture.txt
+Client
+  |
+  | application submission
+  v
+ResourceManager
+  |
+  | allocate ApplicationMaster container
+  v
+NodeManager A
+  |
+  +--> ApplicationMaster
+          |
+          | resource requests
+          v
+      ResourceManager
+          |
+          | allocations
+          v
+  +------------------------+------------------------+
+  |                        |                        |
+NodeManager A          NodeManager B          NodeManager C
+  |                        |                        |
+Map container          Map container          Reduce container
+```
+
+- **ResourceManager:** cluster resource arbitration.
+- **NodeManager:** node-level container lifecycle and monitoring.
+- **ApplicationMaster:** application-specific coordination.
+- **Container:** resource allocation and execution context.
+
+A YARN container is not inherently a Docker container.
+
+### 3.7 Memory request versus JVM heap
+
+If:
+
+- Container allocation = 1,024 MiB.
+- JVM maximum heap = 768 MiB.
+
+Then approximately 256 MiB remains for non-heap consumption within that allocation, including applicable native overhead.
+
+A process can exceed container memory without exceeding `-Xmx`.
+
+Potential contributors:
+
+- Thread stacks.
+- Direct buffers.
+- Native libraries.
+- Metaspace.
+- Compression.
+- Additional processes.
+
+### 3.8 Why Spark improved many MapReduce workloads
+
+Classic multi-job MapReduce workflows often materialize intermediate outputs to durable storage between jobs.
+
+Spark can:
+
+- Pipeline narrow transformations.
+- Preserve intermediate data when useful.
+- Execute a multi-stage DAG within one application.
+- Reuse executors.
+- Support SQL, batch, iterative computation, and streaming APIs.
+
+Spark still performs:
+
+- Serialization.
+- Shuffle.
+- Spill.
+- Disk I/O.
+- Retries.
+- Network transfers.
+
+“Spark runs everything in memory” is false.
+
+---
+
+## Section 2: Production-Grade Code and Implementation
+
+The MapReduce job sums principal by loan status from the validated TSV snapshot.
+
+It uses:
+
+- Strict field validation.
+- Exact signed 64-bit values.
+- Overflow detection.
+- A valid sum combiner.
+- Explicit memory settings.
+- Bounded retries.
+- Fail-fast behavior for invalid Silver data.
+
+```java name=java/LoanTotals.java
+import java.io.IOException;
+import java.util.Set;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
+
+public final class LoanTotals extends Configured implements Tool {
+    private static final Set<String> STATUSES =
+        Set.of("CURRENT", "LATE", "PAID");
+
+    public enum Counters {
+        VALID_INPUT_ROWS,
+        INVALID_INPUT_ROWS
+    }
+
+    public static final class LoanMapper
+            extends Mapper<LongWritable, Text, Text, LongWritable> {
+
+        private final Text outputKey = new Text();
+        private final LongWritable outputValue = new LongWritable();
+
+        @Override
+        protected void map(
+                LongWritable offset,
+                Text line,
+                Context context
+        ) throws IOException, InterruptedException {
+            String[] fields = line.toString().split("\\t", -1);
+
+            if (fields.length != 5) {
+                context.getCounter(Counters.INVALID_INPUT_ROWS).increment(1);
+                throw new IOException(
+                    "Expected 5 TSV fields at byte offset " + offset.get()
+                );
+            }
+
+            long principal;
+            long version;
+
+            try {
+                principal = Long.parseLong(fields[2]);
+                version = Long.parseLong(fields[4]);
+            } catch (NumberFormatException exception) {
+                context.getCounter(Counters.INVALID_INPUT_ROWS).increment(1);
+                throw new IOException(
+                    "Invalid numeric field at byte offset " + offset.get(),
+                    exception
+                );
+            }
+
+            if (fields[0].isEmpty()
+                    || fields[1].isEmpty()
+                    || principal <= 0
+                    || principal > 1_000_000_000_000L
+                    || version <= 0
+                    || !STATUSES.contains(fields[3])) {
+                context.getCounter(Counters.INVALID_INPUT_ROWS).increment(1);
+                throw new IOException(
+                    "Input contract violation at byte offset " + offset.get()
+                );
+            }
+
+            outputKey.set(fields[3]);
+            outputValue.set(principal);
+
+            context.write(outputKey, outputValue);
+            context.getCounter(Counters.VALID_INPUT_ROWS).increment(1);
+        }
+    }
+
+    public static final class SumReducer
+            extends Reducer<Text, LongWritable, Text, LongWritable> {
+
+        private final LongWritable outputValue = new LongWritable();
+
+        @Override
+        protected void reduce(
+                Text key,
+                Iterable<LongWritable> values,
+                Context context
+        ) throws IOException, InterruptedException {
+            long total = 0L;
+
+            for (LongWritable value : values) {
+                try {
+                    total = Math.addExact(total, value.get());
+                } catch (ArithmeticException exception) {
+                    throw new IOException(
+                        "Signed 64-bit overflow for status " + key,
+                        exception
+                    );
+                }
+            }
+
+            outputValue.set(total);
+            context.write(key, outputValue);
+        }
+    }
+
+    @Override
+    public int run(String[] args) throws Exception {
+        if (args.length != 2) {
+            System.err.println(
+                "Usage: LoanTotals <input-path> <new-output-directory>"
+            );
+            return 2;
+        }
+
+        Configuration configuration = getConf();
+        configuration.setInt("mapreduce.map.maxattempts", 2);
+        configuration.setInt("mapreduce.reduce.maxattempts", 2);
+        configuration.setBoolean("mapreduce.map.speculative", false);
+        configuration.setBoolean("mapreduce.reduce.speculative", false);
+
+        Job job = Job.getInstance(configuration, "loan-principal-by-status");
+        job.setJarByClass(LoanTotals.class);
+
+        job.setMapperClass(LoanMapper.class);
+        job.setCombinerClass(SumReducer.class);
+        job.setReducerClass(SumReducer.class);
+
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(LongWritable.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(LongWritable.class);
+
+        job.setNumReduceTasks(2);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        return job.waitForCompletion(true) ? 0 : 1;
+    }
+
+    public static void main(String[] args) throws Exception {
+        int status = ToolRunner.run(
+            new Configuration(),
+            new LoanTotals(),
+            args
+        );
+        System.exit(status);
+    }
+}
+```
+
+### Build
+
+```bash name=scripts/build_mapreduce.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${JAVA_HOME:?}"
+: "${HADOOP_HOME:?}"
+
+mkdir -p build/java
+
+HADOOP_CLASSPATH="$("$HADOOP_HOME/bin/hadoop" classpath --glob)"
+
+"$JAVA_HOME/bin/javac" \
+  --release 11 \
+  -cp "$HADOOP_CLASSPATH" \
+  -d build/java \
+  java/LoanTotals.java
+
+"$JAVA_HOME/bin/jar" \
+  --create \
+  --file build/loan-totals.jar \
+  -C build/java .
+```
+
+---
+
+## Section 3: Production Gotchas, Failure Modes, and Tuning
+
+### Failure: excessive spilling
+
+Inspect counters:
+
+- `MAP_OUTPUT_BYTES`.
+- `MAP_OUTPUT_MATERIALIZED_BYTES`.
+- `SPILLED_RECORDS`.
+- `REDUCE_SHUFFLE_BYTES`.
+- `MERGED_MAP_OUTPUTS`.
+- `GC_TIME_MILLIS`.
+
+A useful diagnostic ratio is:
+
+\[
+\text{Spill amplification}
+=
+\frac{\text{SPILLED_RECORDS}}
+{\text{MAP_OUTPUT_RECORDS}}
+\]
+
+Interpret it in context: records may be spilled during multiple merge phases.
+
+Relevant settings include:
+
+- `mapreduce.task.io.sort.mb`.
+- `mapreduce.map.sort.spill.percent`.
+- `mapreduce.task.io.sort.factor`.
+- `mapreduce.map.output.compress`.
+- `mapreduce.reduce.shuffle.parallelcopies`.
+
+Tuning order:
+
+1. Reduce unnecessary mapper output.
+2. Apply a correct combiner.
+3. Evaluate compression.
+4. Check disk throughput.
+5. Adjust buffers while preserving container headroom.
+
+Increasing buffers without adjusting memory budgets can replace spill overhead with OOM failures.
+
+### Failure: reducer skew
+
+A reducer owning a hot key may dominate runtime.
+
+If a key receives fraction \(q\) of all records, merely increasing reducer count does not divide that key’s work.
+
+Defenses depend on the operation:
+
+- Map-side aggregation.
+- Two-phase salted aggregation.
+- Separate treatment of exceptionally hot keys.
+- Different business partitioning.
+
+For this status-sum job, the combiner is especially effective because the key domain contains only three values.
+
+### Failure: containers remain pending
+
+Check:
+
+1. Requested memory and vcores.
+2. Queue capacity.
+3. Maximum allocation.
+4. Available NodeManager resources.
+5. Allocation granularity.
+6. Whether the ApplicationMaster itself consumes the remaining capacity.
+
+A request can be impossible even when the cluster appears partially idle.
+
+### Failure: retries repeat external side effects
+
+Task retry is expected behavior.
+
+Do not put non-idempotent operations such as “charge card” or “send irreversible notification” directly inside a mapper.
+
+The output committer coordinates framework-managed output; it does not automatically transact arbitrary external services.
+
+### Failure: task success mistaken for job publication
+
+A task may finish before:
+
+- Other tasks finish.
+- Output commit completes.
+- Reconciliation passes.
+- Downstream publication is authorized.
+
+Treat successful job completion and publication as separate operational concepts.
+
+---
+
+## Section 4: Step-by-Step Hands-On Lab
+
+### Scenario
+
+Compute portfolio principal by status using the same Silver snapshot produced in Week 1 and stored in Week 2.
+
+### Execute
+
+```bash name=scripts/run_mapreduce.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${HADOOP_HOME:?}"
+eval "$(bash scripts/hadoop_lab.sh env)"
+source out/hdfs_paths.env
+
+bash scripts/build_mapreduce.sh
+
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+OUTPUT="/lake/gold/mapreduce-loan-totals/$RUN_ID"
+
+"$HADOOP_HOME/bin/hadoop" jar \
+  build/loan-totals.jar \
+  LoanTotals \
+  "$CURRENT_DIRECTORY/current.tsv" \
+  "$OUTPUT"
+
+"$HADOOP_HOME/bin/hdfs" dfs -test -e "$OUTPUT/_SUCCESS"
+
+"$HADOOP_HOME/bin/hdfs" dfs -cat \
+  "$OUTPUT/part-r-*" |
+  sort > out/mapreduce-totals.tsv
+
+printf 'Output: %s\n' "$OUTPUT"
+cat out/mapreduce-totals.tsv
+```
+
+### Assertions
+
+```python name=scripts/verify_mapreduce.py
+from pathlib import Path
+
+
+def main() -> None:
+    totals = {}
+
+    for line in Path("out/mapreduce-totals.tsv").read_text(
+        encoding="utf-8"
+    ).splitlines():
+        status, value = line.split("\t")
+        if status in totals:
+            raise AssertionError(f"Duplicate aggregate key: {status}")
+        totals[status] = int(value)
+
+    assert totals == {
+        "CURRENT": 200000,
+        "LATE": 100000,
+        "PAID": 50000,
+    }
+    assert sum(totals.values()) == 350000
+
+    print("MapReduce output verified.")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### Optimization pass
+
+For the tiny fixture, two reducers are intentionally inefficient. The purpose is to make partitioned output visible.
+
+For a large workload:
+
+\[
+R_{\text{initial}}
+\approx
+\left\lceil
+\frac{\text{Estimated reducer input bytes}}
+{\text{Target bytes per reducer}}
+\right\rceil
+\]
+
+Then adjust for:
+
+- Number of distinct keys.
+- Key skew.
+- Available concurrent containers.
+- Merge memory.
+- Output file count.
+
+A status aggregation with three keys does not benefit from hundreds of reducers.
+
+### Failure experiment
+
+Create a separate input containing a nonnumeric principal field.
+
+Expected behavior:
+
+- Mapper failure.
+- Bounded retries.
+- Job failure.
+- No successfully committed output dataset.
+
+Inspect the failed attempt logs rather than assuming the last visible warning is the root cause.
+
+---
+
+## Section 5: Senior/Staff Interview Defense
+
+### Scenario 1: “Why did adding reducers not improve runtime?”
+
+**Situation:** A hypothetical 2 TB job moves from 100 to 400 reducers but still takes 80 minutes.
+
+**Task:** Identify whether the bottleneck is parallelism or skew.
+
+**Action:**
+
+- Compare reducer input distributions.
+- Find that one key owns 35% of records.
+- Introduce a valid two-stage partial aggregation.
+- Measure shuffle bytes and longest-task duration.
+
+**Result:** Hypothetically, the longest reducer falls from 65 minutes to 12 minutes and total runtime falls from 80 to 27 minutes.
+
+**Trap warning:** More partitions do not divide one unsalted key.
+
+### Scenario 2: “Can the same reducer be used as a combiner?”
+
+**Situation:** An aggregation calculates an average account balance.
+
+**Task:** Determine whether combiner reuse preserves semantics.
+
+**Action:**
+
+- Analyze associativity and the intermediate state.
+- Reject naive average-of-averages.
+- Emit `(sum, count)`.
+- Merge states.
+- Divide only during finalization.
+
+**Result:** A hypothetical randomized test over 10,000 input partitions produces the same exact rational result under arbitrary merge groupings.
+
+**Trap warning:** A combiner is not a guaranteed preliminary reducer.
+
+---
+
+# Week 4 — Spark Core APIs, RDD Lineage, and DAG Execution
+
+## Section 1: Architectural Deep Dive and Internal Mechanics
+
+### 4.1 Process architecture
+
+```text name=week04-pyspark-processes.txt
+Driver host
+===========
+
+Python driver process
+      |
+      | Py4J / local inter-process communication
+      v
+Driver JVM
+  - SparkContext
+  - DAG scheduler
+  - Task scheduler
+  - Application metadata
+      |
+      | serialized tasks / control messages
+      v
+
+Executor host
+=============
+
+Executor JVM
+  - task threads
+  - block manager
+  - shuffle machinery
+  - JVM memory
+      |
+      | Python record exchange
+      v
+Python worker process(es)
+  - Python functions
+  - Python objects
+  - native Python libraries
+```
+
+Python worker memory is not simply an object inside the JVM heap.
+
+This matters when diagnosing an executor container killed for exceeding memory.
+
+### 4.2 RDD abstraction
+
+An RDD describes:
+
+- A partitioned collection.
+- Dependencies on parent RDDs.
+- A computation for each partition.
+- Optional partitioner metadata.
+- Preferred execution locations.
+
+An RDD is not necessarily materialized when its Python variable is assigned.
+
+### 4.3 Lazy evaluation
+
+```python name=examples/lazy_rdd.py
+from pyspark.sql import SparkSession
+
+
+def main() -> None:
+    spark = (
+        SparkSession.builder
+        .master("local[2]")
+        .appName("lazy-rdd-example")
+        .getOrCreate()
+    )
+
+    try:
+        values = spark.sparkContext.parallelize([1, 2, 3, 4], 2)
+        doubled = values.map(lambda value: value * 2)
+        filtered = doubled.filter(lambda value: value > 4)
+
+        assert filtered.collect() == [6, 8]
+    finally:
+        spark.stop()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+`map` and `filter` construct a plan.
+
+`collect` triggers execution.
+
+A crucial production qualification: `collect` is safe here only because the result is known to contain two records.
+
+### 4.4 Narrow versus wide dependencies
+
+```text name=week04-dependencies.txt
+Narrow: map/filter
+==================
+
+Parent P0 ----------> Child P0
+Parent P1 ----------> Child P1
+Parent P2 ----------> Child P2
+
+
+Wide: key-based shuffle
+=======================
+
+Parent P0 -----+-----> Child P0
+              +-----> Child P1
+              +-----> Child P2
+
+Parent P1 -----+-----> Child P0
+              +-----> Child P1
+              +-----> Child P2
+```
+
+A narrow dependency allows a child partition to consume a limited set of parent partitions without a global redistribution.
+
+A shuffle dependency redistributes records across partitions.
+
+For this week’s pipeline:
+
+1. Parse input.
+2. Validate records.
+3. Group by `(loan_id, version)` to detect duplicates and conflicts.
+4. Group by `loan_id` to select the latest version.
+5. Aggregate by `status`.
+
+There are several potential shuffle boundaries.
+
+### 4.5 Why conflict detection requires two reductions
+
+A tempting implementation is:
+
+> Reduce all records by loan ID and retain the maximum version.
+
+That can miss conflicting older versions.
+
+Example:
+
+```text name=week04-conflict-example.txt
+(L001, version 1, principal 100000)
+(L001, version 1, principal 200000)  <-- conflicting payload
+(L001, version 2, principal 300000)
+```
+
+If version 2 replaces each version 1 early in the reduction tree, the conflict may never be compared directly.
+
+Correct sequence:
+
+1. Resolve every `(loan_id, version)` group.
+2. Fail on conflicting payloads.
+3. Then select the highest version per loan.
+
+This is an example of an implementation detail changing business correctness.
+
+### 4.6 Jobs, stages, and tasks
+
+- An action generally initiates one or more jobs.
+- A job is divided into stages based on dependencies, especially shuffle boundaries.
+- A stage launches tasks for partitions.
+- A task attempt executes a partition’s computation.
+- Failed attempts may be retried.
+
+Do not memorize “one action always equals one job” as an invariant.
+
+### 4.7 Memory model
+
+For JVM unified memory, an approximate conceptual relationship is:
+
+\[
+M=(H-R)\times f
+\]
+
+Where:
+
+- \(H\): executor heap.
+- \(R\): reserved memory.
+- \(f\): `spark.memory.fraction`.
+- \(M\): unified execution/storage region.
+
+Within that region, `spark.memory.storageFraction` controls a protected storage region, not a completely rigid permanent split.
+
+Important qualifications:
+
+- Python worker memory is separate.
+- Off-heap allocations may exist.
+- Cached Python RDD data is serialized.
+- Objects and buffers outside unified memory still consume resources.
+- A larger heap may increase GC costs.
+- Not every spill is a defect.
+
+### 4.8 Fault tolerance
+
+RDD lineage permits recomputation of lost partitions when the source and transformations remain available and deterministic.
+
+Failure scenarios:
+
+| Failure | Typical recovery |
+|---|---|
+| Task attempt fails | Retry task |
+| Executor disappears | Reschedule work; recompute lost partitions |
+| Shuffle output disappears | Recompute required upstream output |
+| Driver fails | Application commonly fails; external restart needed |
+| Source changes during recomputation | Results may become inconsistent |
+| External side effect repeats | Requires separate idempotency design |
+
+---
+
+## Section 2: Production-Grade Code and Implementation
+
+The Spark implementation:
+
+- Reuses the same validation contract.
+- Separates invalid records.
+- Detects every conflicting version.
+- Deduplicates deterministically.
+- Uses integer money.
+- Avoids collecting loan-level data.
+- Caches reused RDDs.
+- Unpersists explicitly.
+- Writes an immutable run.
+- Writes a manifest only after data and reconciliation succeed.
+
+**Publication rule:** Readers consume a run only if its `manifest/_SUCCESS` exists.
+
+The output is a full snapshot per run. Downstream readers must not union all run directories as if they were incremental transactions.
+
+```python name=loanbook/rdd_job.py
+import argparse
+import hashlib
+import json
+import logging
+import uuid
+from decimal import Decimal
+
+from pyspark import StorageLevel
+from pyspark.sql import SparkSession
+
+from loanbook.model import ValidationError, canonical_json, parse_record
+
+LOG = logging.getLogger("loanbook.rdd")
+
+
+def classify_line(line: str) -> tuple[str, dict]:
+    try:
+        return "valid", parse_record(line)
+    except ValidationError as exc:
+        return (
+            "invalid",
+            {
+                "reason": str(exc),
+                "raw_sha256": hashlib.sha256(
+                    line.encode("utf-8")
+                ).hexdigest(),
+            },
+        )
+
+
+def merge_identical(left: dict, right: dict) -> dict:
+    if left != right:
+        raise ValueError(
+            "CONFLICTING_VERSION: "
+            f"loan={left['loan_id']} version={left['version']}"
+        )
+    return left
+
+
+def newer_record(left: dict, right: dict) -> dict:
+    if left["version"] == right["version"]:
+        return merge_identical(left, right)
+    return left if left["version"] > right["version"] else right
+
+
+def unique_versions(valid_records, partitions: int):
+    return (
+        valid_records
+        .map(
+            lambda record: (
+                (record["loan_id"], record["version"]),
+                record,
+            )
+        )
+        .reduceByKey(merge_identical, numPartitions=partitions)
+        .values()
+    )
+
+
+def latest_records(version_records, partitions: int):
+    return (
+        version_records
+        .map(lambda record: (record["loan_id"], record))
+        .reduceByKey(newer_record, numPartitions=partitions)
+        .values()
+    )
+
+
+def run_pipeline(
+    spark: SparkSession,
+    input_path: str,
+    output_base: str,
+    partitions: int,
+) -> tuple[str, dict]:
+    if partitions <= 0:
+        raise ValueError("partitions must be positive")
+
+    context = spark.sparkContext
+    run_id = uuid.uuid4().hex
+    run_path = output_base.rstrip("/") + "/" + run_id
+
+    tagged = None
+    versions = None
+    latest = None
+
+    try:
+        tagged = (
+            context.textFile(input_path, minPartitions=partitions)
+            .map(classify_line)
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+
+        valid = (
+            tagged
+            .filter(lambda item: item[0] == "valid")
+            .map(lambda item: item[1])
+        )
+
+        rejected = (
+            tagged
+            .filter(lambda item: item[0] == "invalid")
+            .map(lambda item: item[1])
+        )
+
+        classification_counts = dict(
+            tagged
+            .map(lambda item: (item[0], 1))
+            .reduceByKey(lambda left, right: left + right)
+            .collect()
+        )
+
+        valid_count = classification_counts.get("valid", 0)
+        rejected_count = classification_counts.get("invalid", 0)
+        input_count = valid_count + rejected_count
+
+        versions = (
+            unique_versions(valid, partitions)
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+        version_count = versions.count()
+
+        latest = (
+            latest_records(versions, partitions)
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
+        loan_count = latest.count()
+
+        status_totals = dict(
+            latest
+            .map(
+                lambda record: (
+                    record["status"],
+                    record["principal_cents"],
+                )
+            )
+            .reduceByKey(
+                lambda left, right: left + right,
+                numPartitions=partitions,
+            )
+            .collect()
+        )
+
+        principal_cents = sum(status_totals.values())
+        active_principal_cents = (
+            status_totals.get("CURRENT", 0)
+            + status_totals.get("LATE", 0)
+        )
+        delinquent_principal_cents = status_totals.get("LATE", 0)
+
+        delinquency_ratio = (
+            str(
+                Decimal(delinquent_principal_cents)
+                / Decimal(active_principal_cents)
+            )
+            if active_principal_cents
+            else None
+        )
+
+        metrics = {
+            "run_id": run_id,
+            "input_path": input_path,
+            "input_rows": input_count,
+            "valid_rows": valid_count,
+            "rejected_rows": rejected_count,
+            "unique_versions": version_count,
+            "duplicate_rows": valid_count - version_count,
+            "superseded_versions": version_count - loan_count,
+            "loan_count": loan_count,
+            "principal_cents": principal_cents,
+            "active_principal_cents": active_principal_cents,
+            "delinquent_principal_cents": delinquent_principal_cents,
+            "delinquency_ratio": delinquency_ratio,
+            "status_totals": status_totals,
+        }
+
+        if metrics["duplicate_rows"] < 0:
+            raise AssertionError("Negative duplicate count")
+        if metrics["superseded_versions"] < 0:
+            raise AssertionError("Negative superseded count")
+        if input_count != valid_count + rejected_count:
+            raise AssertionError("Input reconciliation failed")
+        if not 0 <= delinquent_principal_cents <= active_principal_cents:
+            raise AssertionError("Invalid delinquency components")
+        if active_principal_cents > principal_cents:
+            raise AssertionError("Active principal exceeds total principal")
+
+        latest.map(canonical_json).saveAsTextFile(run_path + "/current")
+
+        rejected.map(
+            lambda record: json.dumps(record, sort_keys=True)
+        ).saveAsTextFile(run_path + "/rejected")
+
+        # This small collection is bounded by the three allowed statuses.
+        context.parallelize(
+            [
+                json.dumps(
+                    {
+                        "status": status,
+                        "principal_cents": principal,
+                    },
+                    sort_keys=True,
+                )
+                for status, principal in sorted(status_totals.items())
+            ],
+            1,
+        ).saveAsTextFile(run_path + "/status_totals")
+
+        # The manifest is the publication boundary and is written last.
+        context.parallelize(
+            [json.dumps(metrics, sort_keys=True)],
+            1,
+        ).saveAsTextFile(run_path + "/manifest")
+
+        LOG.info(
+            "run_committed path=%s metrics=%s",
+            run_path,
+            json.dumps(metrics, sort_keys=True),
+        )
+        return run_path, metrics
+
+    except Exception:
+        LOG.exception(
+            "run_failed path=%s; ignore run unless manifest/_SUCCESS exists",
+            run_path,
+        )
+        raise
+
+    finally:
+        for rdd in (latest, versions, tagged):
+            if rdd is not None:
+                rdd.unpersist(blocking=True)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output-base", required=True)
+    parser.add_argument("--partitions", type=int, default=4)
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+    spark = (
+        SparkSession.builder
+        .appName("loanbook-rdd-snapshot")
+        .getOrCreate()
+    )
+
+    try:
+        run_path, metrics = run_pipeline(
+            spark,
+            args.input,
+            args.output_base,
+            args.partitions,
+        )
+        print(json.dumps({"run_path": run_path, **metrics}, indent=2))
+    finally:
+        spark.stop()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### Why the two `collect()` calls are acceptable
+
+Their key domains are bounded:
+
+- Classification: `valid`, `invalid`.
+- Status: `CURRENT`, `LATE`, `PAID`.
+
+This differs fundamentally from collecting all loans.
+
+“Never use `collect`” is too simplistic. The correct rule is to establish a strict, operationally safe upper bound on driver-resident results.
+
+### Quarantine hash limitation
+
+The Spark text reader supplies decoded records without the original line terminator. Therefore, the Spark rejection hash identifies the decoded line representation, whereas the SQLite version hashes original input bytes.
+
+They are not interchangeable raw-file forensic hashes.
+
+For byte-exact source lineage, retain:
+
+- Immutable source file identity.
+- File checksum.
+- Record offset or equivalent source position.
+- Original restricted raw payload.
+
+---
+
+## Section 3: Production Gotchas, Failure Modes, and Tuning
+
+### Failure: driver OOM
+
+Common causes:
+
+- Large `collect`.
+- `collectAsMap` on unbounded keys.
+- Large local structures captured in closures.
+- Excessive task metadata.
+- Huge query plans.
+- Large broadcast preparation.
+
+Diagnostic sequence:
+
+1. Determine whether the failing process is the driver or executor.
+2. Inspect driver heap and GC.
+3. Find the action running at failure.
+4. Estimate serialized and deserialized result size.
+5. Check `spark.driver.maxResultSize`.
+6. Remove unnecessary driver materialization.
+
+Increasing `spark.driver.maxResultSize` does not increase available heap. It can remove a protective limit and expose an OOM.
+
+### Failure: executor/container OOM
+
+Inspect separately:
+
+- JVM heap.
+- Python worker RSS.
+- Native memory.
+- Direct buffers.
+- Task concurrency.
+- Per-task input size.
+
+Relevant settings:
+
+- `spark.executor.memory`.
+- `spark.executor.memoryOverhead`.
+- `spark.executor.pyspark.memory`.
+- `spark.executor.cores`.
+- `spark.task.cpus`.
+
+A rough concurrency bound is:
+
+\[
+\text{Concurrent tasks per executor}
+\approx
+\left\lfloor
+\frac{\text{executor cores}}
+{\text{task CPUs}}
+\right\rfloor
+\]
+
+More concurrent tasks can increase aggregate peak memory.
+
+### Failure: inefficient key aggregation
+
+`groupByKey` can move all values for a key before aggregation.
+
+`reduceByKey` can combine compatible values before the shuffle.
+
+For \(N\) records and \(K_p\) distinct keys per upstream partition, ideal map-side combining can reduce emitted records toward:
+
+\[
+\sum_p K_p
+\]
+
+instead of \(N\).
+
+The real reduction depends on implementation, spill, key distribution, and the aggregation function.
+
+### Failure: nondeterministic transformation
+
+Avoid dependence on:
+
+- Current wall-clock time.
+- Unseeded randomness.
+- Mutable external state.
+- Partition iteration order.
+- Non-idempotent external calls.
+
+Retries can recompute a partition later or on a different worker.
+
+### Failure: too few or too many partitions
+
+Too few:
+
+- Low parallelism.
+- Large per-task state.
+- Increased spill.
+- Long stragglers.
+
+Too many:
+
+- Scheduler overhead.
+- More shuffle blocks.
+- Small output files.
+- High commit overhead.
+
+Initial heuristic:
+
+\[
+P_{\text{initial}}
+=
+\left\lceil
+\frac{\text{Estimated stage bytes}}
+{\text{Target task bytes}}
+\right\rceil
+\]
+
+Then reconcile with available task concurrency and measured skew.
+
+There is no universally correct task-byte target.
+
+### Failure: tuning the wrong partition setting
+
+`spark.sql.shuffle.partitions` controls relevant SQL/DataFrame shuffle planning.
+
+It does **not** override the explicit `numPartitions` passed to this RDD `reduceByKey`.
+
+This pipeline exposes `--partitions` for that reason.
+
+### Spark UI diagnostic sequence
+
+1. **Jobs:** identify the slow action.
+2. **Stages:** identify the slow stage.
+3. **Task distribution:** compare median, p95, and maximum duration.
+4. **Input/shuffle bytes:** compare task-level distribution.
+5. **Spill:** determine memory versus disk spill.
+6. **GC:** compare GC time with task runtime.
+7. **Executors:** inspect losses, failed tasks, and memory.
+8. **Storage:** verify whether persisted RDDs materialized and fit.
+9. **Environment:** confirm effective settings, not intended settings.
+
+A large maximum-to-median task-time ratio suggests skew or heterogeneous execution conditions, but does not by itself prove key skew.
+
+---
+
+## Section 4: Step-by-Step Hands-On Lab
+
+### Scenario
+
+Replace the single-machine current-snapshot calculation with a distributed RDD pipeline while preserving the exact business contract.
+
+### Tests
+
+```python name=tests/test_rdd.py
+import json
+
+import pytest
+from pyspark.sql import SparkSession
+
+from loanbook.rdd_job import (
+    classify_line,
+    latest_records,
+    unique_versions,
+)
+
+
+@pytest.fixture(scope="session")
+def spark():
+    session = (
+        SparkSession.builder
+        .master("local[2]")
+        .appName("loanbook-rdd-tests")
+        .config("spark.ui.enabled", "false")
+        .config("spark.driver.bindAddress", "127.0.0.1")
+        .config("spark.task.maxFailures", "1")
+        .getOrCreate()
+    )
+    session.sparkContext.setLogLevel("ERROR")
+    yield session
+    session.stop()
+
+
+def make_record(version=1, principal=100000, status="CURRENT"):
+    return {
+        "loan_id": "L001",
+        "version": version,
+        "customer_id": "C001",
+        "principal_cents": principal,
+        "status": status,
+    }
+
+
+def test_classification_rejects_malformed_json():
+    category, details = classify_line('{"broken"')
+    assert category == "invalid"
+    assert details["reason"] == "malformed_json"
+    assert len(details["raw_sha256"]) == 64
+
+
+def test_latest_is_deterministic(spark):
+    records = [
+        make_record(version=2, status="LATE"),
+        make_record(version=1),
+        make_record(version=1),
+    ]
+
+    source = spark.sparkContext.parallelize(records, 3)
+    versions = unique_versions(source, 2)
+    latest = latest_records(versions, 2)
+
+    assert versions.count() == 2
+    assert latest.collect() == [make_record(version=2, status="LATE")]
+
+
+def test_old_conflict_is_not_hidden_by_new_version(spark):
+    records = [
+        make_record(version=1, principal=100000),
+        make_record(version=1, principal=200000),
+        make_record(version=2, principal=300000),
+    ]
+
+    source = spark.sparkContext.parallelize(records, 3)
+
+    with pytest.raises(Exception, match="CONFLICTING_VERSION"):
+        latest_records(unique_versions(source, 2), 2).collect()
+
+
+def test_fixture_reconciliation(spark):
+    lines = spark.sparkContext.textFile("data/loans.jsonl", 2)
+    tagged = lines.map(classify_line).cache()
+
+    try:
+        valid = tagged.filter(
+            lambda item: item[0] == "valid"
+        ).map(lambda item: item[1])
+
+        invalid = tagged.filter(
+            lambda item: item[0] == "invalid"
+        )
+
+        versions = unique_versions(valid, 2)
+        latest = latest_records(versions, 2)
+
+        assert tagged.count() == 9
+        assert valid.count() == 5
+        assert invalid.count() == 4
+        assert versions.count() == 4
+
+        results = latest.collect()
+        assert len(results) == 3
+        assert sum(row["principal_cents"] for row in results) == 350000
+
+        encoded = [json.dumps(row, sort_keys=True) for row in results]
+        assert len(set(encoded)) == 3
+    finally:
+        tagged.unpersist()
+```
+
+Run:
+
+```bash name=scripts/test_rdd.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+source .venv/bin/activate
+export PYSPARK_PYTHON="$PWD/.venv/bin/python"
+
+python scripts/generate_input.py
+pytest -q tests/test_rdd.py
+```
+
+### Package and submit
+
+```bash name=scripts/run_rdd.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${SPARK_HOME:?Set SPARK_HOME to Spark 3.5.1}"
+: "${HADOOP_HOME:?}"
+: "${JAVA_HOME:?}"
+
+eval "$(bash scripts/hadoop_lab.sh env)"
+source out/hdfs_paths.env
+
+export PYSPARK_PYTHON="$PWD/.venv/bin/python"
+export PYSPARK_DRIVER_PYTHON="$PWD/.venv/bin/python"
+
+mkdir -p build
+
+python3.11 - <<'PY'
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
+
+with ZipFile("build/loanbook.zip", "w", compression=ZIP_DEFLATED) as archive:
+    for path in sorted(Path("loanbook").glob("*.py")):
+        archive.write(path, arcname=str(path))
+PY
+
+"$SPARK_HOME/bin/spark-submit" \
+  --master yarn \
+  --deploy-mode client \
+  --num-executors 2 \
+  --executor-cores 1 \
+  --executor-memory 1g \
+  --driver-memory 1g \
+  --conf spark.executor.memoryOverhead=512 \
+  --conf spark.pyspark.python="$PYSPARK_PYTHON" \
+  --conf spark.dynamicAllocation.enabled=false \
+  --conf spark.speculation=false \
+  --conf spark.task.maxFailures=2 \
+  --conf spark.driver.maxResultSize=64m \
+  --py-files build/loanbook.zip \
+  loanbook/rdd_job.py \
+  --input "$RAW_DIRECTORY/loans.jsonl" \
+  --output-base /lake/gold/rdd-loan-snapshots \
+  --partitions 4
+```
+
+This uses an absolute Python interpreter path that exists on the single lab machine.
+
+On a real multi-node cluster, that path must exist on every executor host, or the Python environment must be distributed through an appropriate environment-packaging mechanism.
+
+### Verify publication
+
+Use the `run_path` printed by the job.
+
+```bash name=scripts/verify_rdd_run.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${HADOOP_HOME:?}"
+RUN_PATH="${1:?Usage: verify_rdd_run.sh <run-path>}"
+
+eval "$(bash scripts/hadoop_lab.sh env)"
+
+"$HADOOP_HOME/bin/hdfs" dfs -test -e \
+  "$RUN_PATH/manifest/_SUCCESS"
+
+"$HADOOP_HOME/bin/hdfs" dfs -cat \
+  "$RUN_PATH/manifest/part-*" > out/rdd-manifest.json
+
+python3.11 - <<'PY'
+import json
+from pathlib import Path
+
+metrics = json.loads(
+    Path("out/rdd-manifest.json").read_text(encoding="utf-8")
+)
+
+expected = {
+    "input_rows": 9,
+    "valid_rows": 5,
+    "rejected_rows": 4,
+    "unique_versions": 4,
+    "duplicate_rows": 1,
+    "superseded_versions": 1,
+    "loan_count": 3,
+    "principal_cents": 350000,
+    "active_principal_cents": 300000,
+    "delinquent_principal_cents": 100000,
+}
+
+for key, value in expected.items():
+    assert metrics[key] == value, (key, metrics[key], value)
+
+print("RDD snapshot verified.")
+PY
+```
+
+### Optimization pass
+
+Compare these configurations on a larger generated fixture:
+
+- 2 partitions.
+- 8 partitions.
+- 32 partitions.
+
+For each, record:
+
+| Measurement | Why it matters |
+|---|---|
+| End-to-end duration | Actual SLA impact |
+| Task median/p95/max | Skew and stragglers |
+| Shuffle write/read | Redistribution cost |
+| Spill bytes | Working-set pressure |
+| Executor GC time | Heap/object pressure |
+| Output file count | Downstream operational cost |
+| Recomputed stages | Cache and failure behavior |
+
+Do not claim an optimization from one cold run versus one warm run.
+
+Use repeated runs and report the distribution.
+
+### Failure experiment
+
+Run with a larger fixture and stop an executor container.
+
+Expected:
+
+- Some tasks fail.
+- Spark reschedules tasks.
+- Lost cached partitions may be recomputed.
+- The final result remains correct if input is immutable and transformations are deterministic.
+
+Separately terminate the driver.
+
+Expected:
+
+- The application does not behave like an executor-only failure.
+- An orchestrator must determine whether a committed manifest exists.
+- A restart creates a new immutable run.
+- Publication policy must choose the intended committed snapshot.
+
+---
+
+## Section 5: Senior/Staff Interview Defense
+
+### Scenario 1: “The Spark job succeeds, but totals vary between runs.”
+
+**Situation:** A hypothetical snapshot pipeline uses arrival order and `reduceByKey` to retain one record.
+
+**Task:** Make results deterministic without hiding source inconsistencies.
+
+**Action:**
+
+- Define source version ordering.
+- Detect conflicting payloads per `(business_key, version)`.
+- Only then select the latest version.
+- Test random partitioning and input permutations.
+- Remove wall-clock-dependent transformations.
+
+**Result:** In a hypothetical test across 200 randomized partition layouts, all successful runs produce identical business totals, while conflicting-version fixtures fail consistently.
+
+**Trap warning:** A deterministic-looking lambda is not enough; the merge operation must preserve the required algebra and validation semantics.
+
+### Scenario 2: “Executor memory was doubled, but the job still gets killed.”
+
+**Situation:** A hypothetical PySpark job allocates large Python objects in four concurrent tasks per executor.
+
+**Task:** Identify which memory boundary is exceeded.
+
+**Action:**
+
+- Separate JVM heap from Python RSS and native memory.
+- Inspect container termination reasons.
+- Reduce task concurrency.
+- Reduce per-record object expansion.
+- Adjust overhead only after measuring the non-heap requirement.
+- Validate throughput under the new configuration.
+
+**Result:** Hypothetically, executor peak RSS falls from 11 GB to 6.5 GB and failure-driven reruns disappear, reducing median completion time from 52 to 31 minutes.
+
+**Trap warning:** `spark.executor.memory` is not the complete memory budget of a PySpark executor container.
+
+### Scenario 3: “Why not use `groupByKey` everywhere?”
+
+**Situation:** A hypothetical aggregation shuffles 4.2 TB of records to compute per-account sums.
+
+**Task:** Reduce network and reducer memory while preserving results.
+
+**Action:**
+
+- Replace value-list materialization with an associative partial aggregation.
+- Measure map-side reduction.
+- Compare exact integer totals.
+- Inspect the remaining hot keys separately.
+
+**Result:** In the illustrative benchmark, shuffle falls from 4.2 TB to 380 GB and runtime falls from 100 to 32 minutes—a 68% reduction.
+
+**Trap warning:** `reduceByKey` is not universally superior for every operation. Some computations genuinely require all values or a more sophisticated mergeable state.
+
+---
+
+# Volume 1 Completion Checklist
+
+## Knowledge
+
+- [ ] Explain partial failure without equating timeout with rollback.
+- [ ] Distinguish CAP consistency from ACID consistency.
+- [ ] Explain when compute-storage decoupling helps and what it costs.
+- [ ] Trace an HDFS read and write without routing data through the NameNode.
+- [ ] Distinguish replication, backup, checkpointing, and HA.
+- [ ] Explain why small files affect metadata and scheduling.
+- [ ] Distinguish an HDFS block from an input split.
+- [ ] Prove whether an aggregation is combiner-safe.
+- [ ] Explain ResourceManager, NodeManager, and ApplicationMaster responsibilities.
+- [ ] Trace a PySpark function across driver, JVM, and Python worker processes.
+- [ ] Explain narrow dependencies, shuffle boundaries, and retries.
+- [ ] Explain why source-version conflict detection precedes latest-version selection.
+
+## Implementation
+
+- [ ] Generate the nine-line fixture.
+- [ ] Ingest it transactionally.
+- [ ] Confirm identical-batch retry is a no-op.
+- [ ] Confirm conflicting source versions roll back.
+- [ ] Verify the exact financial totals.
+- [ ] Start the isolated HDFS/YARN lab.
+- [ ] Upload and hash-verify the Silver snapshot.
+- [ ] Demonstrate desired versus actual replication.
+- [ ] Compile and run the Java MapReduce job.
+- [ ] Run the RDD tests.
+- [ ] Submit the PySpark application to YARN.
+- [ ] Verify the commit manifest and reconciliation metrics.
+
+**Scope status:** Weeks 1–4 are developed in this installment. Weeks 5–32, the four complete capstones, the 50+ question Spark interview bank, the DSA master module, and career modules are **not yet included**; presenting them as complete here would misrepresent the coverage.
